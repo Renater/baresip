@@ -13,7 +13,7 @@ extern "C" {
 
 
 /** Defines the Baresip version string */
-#define BARESIP_VERSION "0.5.10"
+#define BARESIP_VERSION "0.5.11"
 
 
 #ifndef NET_MAX_NS
@@ -62,6 +62,8 @@ int account_set_display_name(struct account *acc, const char *dname);
 int account_set_regint(struct account *acc, uint32_t regint);
 int account_set_mediaenc(struct account *acc, const char *mediaenc);
 int account_set_audio_codecs(struct account *acc, const char *codecs);
+int account_set_mwi(struct account *acc, const char *value);
+int account_set_call_transfer(struct account *acc, const char *value);
 int account_auth(const struct account *acc, char **username, char **password,
 		 const char *realm);
 struct list *account_aucodecl(const struct account *acc);
@@ -81,6 +83,8 @@ const char *account_stun_user(const struct account *acc);
 const char *account_stun_pass(const struct account *acc);
 const char *account_stun_host(const struct account *acc);
 const char *account_mediaenc(const struct account *acc);
+const char *account_mwi(const struct account *acc);
+const char *account_call_transfer(const struct account *acc);
 
 
 /*
@@ -654,6 +658,7 @@ enum ua_event {
 	UA_EVENT_REGISTER_OK,
 	UA_EVENT_REGISTER_FAIL,
 	UA_EVENT_UNREGISTERING,
+	UA_EVENT_MWI_NOTIFY,
 	UA_EVENT_SHUTDOWN,
 	UA_EVENT_EXIT,
 
@@ -1070,12 +1075,12 @@ struct vidfilt_dec_st {
 typedef int (vidfilt_encupd_h)(struct vidfilt_enc_st **stp, void **ctx,
 			       const struct vidfilt *vf);
 typedef int (vidfilt_encode_h)(struct vidfilt_enc_st *st,
-			       struct vidframe *frame);
+			       struct vidframe *frame, uint64_t *timestamp);
 
 typedef int (vidfilt_decupd_h)(struct vidfilt_dec_st **stp, void **ctx,
 			       const struct vidfilt *vf);
 typedef int (vidfilt_decode_h)(struct vidfilt_dec_st *st,
-			       struct vidframe *frame);
+			       struct vidframe *frame, uint64_t *timestamp);
 
 struct vidfilt {
 	struct le le;
@@ -1130,11 +1135,11 @@ int   video_set_source(struct video *v, const char *name, const char *dev);
 void  video_set_devicename(struct video *v, const char *src, const char *disp);
 void  video_encoder_cycle(struct video *video);
 int   video_debug(struct re_printf *pf, const struct video *v);
-uint64_t video_calc_rtp_timestamp(int64_t pts, double fps);
 uint64_t video_calc_rtp_timestamp_fix(uint64_t timestamp);
 double video_calc_seconds(uint64_t rtp_ts);
 struct stream *video_strm(const struct video *v);
 double video_timestamp_to_seconds(uint64_t timestamp);
+uint64_t video_calc_timebase_timestamp(uint64_t rtp_ts);
 
 
 /*

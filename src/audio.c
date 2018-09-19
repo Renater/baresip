@@ -938,10 +938,10 @@ static void stream_recv_handler(const struct rtp_header *hdr,
 
 		uint64_t ext_last, ext_now;
 
-		ext_last = calc_extended_timestamp(rx->ts_recv.num_wraps,
+		ext_last = timestamp_calc_extended(rx->ts_recv.num_wraps,
 						   rx->ts_recv.last);
 
-		ext_now = calc_extended_timestamp(rx->ts_recv.num_wraps,
+		ext_now = timestamp_calc_extended(rx->ts_recv.num_wraps,
 						  hdr->ts);
 
 		if (ext_now <= ext_last) {
@@ -958,9 +958,7 @@ static void stream_recv_handler(const struct rtp_header *hdr,
 		}
 	}
 	else {
-		rx->ts_recv.first = hdr->ts;
-		rx->ts_recv.last = hdr->ts;
-		rx->ts_recv.is_set = true;
+		timestamp_set(&rx->ts_recv, hdr->ts);
 	}
 
 	wrap = timestamp_wrap(hdr->ts, rx->ts_recv.last);
@@ -1661,6 +1659,7 @@ int audio_encoder_set(struct audio *a, const struct aucodec *ac,
 		/* Audio source must be stopped first */
 		if (reset) {
 			tx->ausrc = mem_deref(tx->ausrc);
+			aubuf_flush(tx->aubuf);
 		}
 
 		tx->enc = mem_deref(tx->enc);
@@ -1730,6 +1729,7 @@ int audio_decoder_set(struct audio *a, const struct aucodec *ac,
 	if (reset) {
 
 		rx->auplay = mem_deref(rx->auplay);
+		aubuf_flush(rx->aubuf);
 
 		/* Reset audio filter chain */
 		list_flush(&rx->filtl);

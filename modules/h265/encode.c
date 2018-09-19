@@ -64,7 +64,7 @@ static int set_params(struct videnc_state *st, double fps, unsigned bitrate)
 	st->param->bRepeatHeaders = 1;
 
 	/* Rate Control */
-	st->param->rc.rateControlMode = X265_RC_CRF;
+	st->param->rc.rateControlMode = X265_RC_ABR;
 	st->param->rc.bitrate = bitrate / 1000;
 	st->param->rc.vbvMaxBitrate = bitrate / 1000;
 	st->param->rc.vbvBufferSize = 2 * bitrate / fps;
@@ -272,8 +272,6 @@ int h265_encode(struct videnc_state *st, bool update,
 #endif
 
 		h265_skip_startcode(&p, &len);
-
-		/* XXX: use pic_out.pts */
 
 		marker = (i+1)==nalc;  /* last NAL */
 

@@ -153,7 +153,8 @@ static void display_handler(void *arg)
 }
 
 
-static int display(struct video_loop *vl, struct vidframe *frame)
+static int display(struct video_loop *vl, struct vidframe *frame,
+		   uint64_t timestamp)
 {
 	struct vidframe *frame_filt = NULL;
 	struct le *le;
@@ -183,11 +184,11 @@ static int display(struct video_loop *vl, struct vidframe *frame)
 		}
 
 		if (st->vf->dech)
-			err |= st->vf->dech(st, frame);
+			err |= st->vf->dech(st, frame, &timestamp);
 	}
 
 	if (err) {
-		warning("vidloop: error in video-filters (%m)\n", err);
+		warning("vidloop: error in decode video-filter (%m)\n", err);
 	}
 
 	/* save the displayed frame info */
@@ -197,15 +198,24 @@ static int display(struct video_loop *vl, struct vidframe *frame)
 	lock_write_get(vl->frame_mutex);
 
 	if (vl->frame && ! vidsz_cmp(&vl->frame->size, &frame->size)) {
-		mem_deref(vl->frame);
+
+		info("vidloop: resolution changed:  %u x %u\n",
+		     frame->size.w, frame->size.h);
+
+		vl->frame = mem_deref(vl->frame);
 	}
 
 	if (!vl->frame) {
-		vidframe_alloc(&vl->frame, frame->fmt, &frame->size);
+		err = vidframe_alloc(&vl->frame, frame->fmt, &frame->size);
+		if (err)
+			goto out;
 	}
+
 	vidframe_copy(vl->frame, frame);
 	vl->new_frame = true;
+	/* XXX: pass timestamp to vidisp */
 
+ out:
 	lock_rel(vl->frame_mutex);
 
 	mem_deref(frame_filt);
@@ -222,6 +232,7 @@ static int packet_handler(bool marker, uint64_t rtp_ts,
 	struct video_loop *vl = arg;
 	struct vidframe frame;
 	struct mbuf *mb;
+	uint64_t timestamp;
 	bool intra;
 	int err = 0;
 
@@ -256,9 +267,12 @@ static int packet_handler(bool marker, uint64_t rtp_ts,
 			++vl->stat.n_intra;
 	}
 
+	/* convert the RTP timestamp to VIDEO_TIMEBASE timestamp */
+	timestamp = video_calc_timebase_timestamp(rtp_ts);
+
 	if (vidframe_isvalid(&frame)) {
 
-		display(vl, &frame);
+		display(vl, &frame, timestamp);
 	}
 
  out:
@@ -315,7 +329,7 @@ static void vidsrc_frame_handler(struct vidframe *frame, uint64_t timestamp,
 		struct vidfilt_enc_st *st = le->data;
 
 		if (st->vf->ench)
-			err |= st->vf->ench(st, frame);
+			err |= st->vf->ench(st, frame, &timestamp);
 	}
 
 	if (vl->vc_enc && vl->enc) {
@@ -328,7 +342,7 @@ static void vidsrc_frame_handler(struct vidframe *frame, uint64_t timestamp,
 	}
 	else {
 		vl->stat.bytes += vidframe_size(frame->fmt, &frame->size);
-		(void)display(vl, frame);
+		(void)display(vl, frame, timestamp);
 	}
 
  out:

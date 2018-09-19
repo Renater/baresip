@@ -71,7 +71,6 @@ struct account {
 	uint32_t regint;             /**< Registration interval in [seconds] */
 	uint32_t pubint;             /**< Publication interval in [seconds]  */
 	char *regq;                  /**< Registration Q-value               */
-	char *rtpkeep;               /**< RTP Keepalive mechanism            */
 	char *sipnat;                /**< SIP Nat mechanism                  */
 	char *stun_user;             /**< STUN Username                      */
 	char *stun_pass;             /**< STUN Password                      */
@@ -79,6 +78,8 @@ struct account {
 	uint16_t stun_port;          /**< STUN Port number                   */
 	struct le vcv[4];            /**< List elements for vidcodecl        */
 	struct list vidcodecl;       /**< List of preferred video-codecs     */
+	bool mwi;                    /**< MWI on/off                         */
+	bool refer;                  /**< REFER method on/off                */
 };
 
 
@@ -302,17 +303,6 @@ int rtpext_decode(struct rtpext *ext, struct mbuf *mb);
 
 
 /*
- * RTP keepalive
- */
-
-struct rtpkeep;
-
-int  rtpkeep_alloc(struct rtpkeep **rkp, const char *method, int proto,
-		   struct rtp_sock *rtp, struct sdp_media *sdp);
-void rtpkeep_refresh(struct rtpkeep *rk, uint32_t ts);
-
-
-/*
  * SDP
  */
 
@@ -350,7 +340,6 @@ struct stream {
 	struct call *call;       /**< Ref. to call object                   */
 	struct sdp_media *sdp;   /**< SDP Media line                        */
 	struct rtp_sock *rtp;    /**< RTP Socket                            */
-	struct rtpkeep *rtpkeep; /**< RTP Keepalive                         */
 	struct rtcp_stats rtcp_stats;/**< RTCP statistics                   */
 	struct jbuf *jbuf;       /**< Jitter Buffer for incoming RTP        */
 	struct mnat_media *mns;  /**< Media NAT traversal state             */
@@ -414,7 +403,7 @@ struct ua;
 void         ua_printf(const struct ua *ua, const char *fmt, ...);
 
 struct tls  *uag_tls(void);
-const char  *uag_allowed_methods(void);
+const char  *ua_allowed_methods(const struct ua *ua);
 
 
 /*
@@ -461,16 +450,7 @@ struct timestamp_recv {
 };
 
 
-static inline uint64_t calc_extended_timestamp(uint32_t num_wraps, uint32_t ts)
-{
-	uint64_t ext_ts;
-
-	ext_ts  = (uint64_t)num_wraps * 0x100000000ULL;
-	ext_ts += (uint64_t)ts;
-
-	return ext_ts;
-}
-
-
 int      timestamp_wrap(uint32_t ts_new, uint32_t ts_old);
+void     timestamp_set(struct timestamp_recv *ts, uint32_t rtp_ts);
 uint64_t timestamp_duration(const struct timestamp_recv *ts);
+uint64_t timestamp_calc_extended(uint32_t num_wraps, uint32_t ts);
