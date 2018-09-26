@@ -736,12 +736,18 @@ int ua_update_account(struct ua *ua)
 }
 
 
-static int uri_complete(struct ua *ua, struct mbuf *buf, const char *uri)
+int ua_uri_complete(struct ua *ua, struct mbuf *buf, const char *uri)
 {
-	size_t len;
-	int err = 0;
-	bool uri_is_ip;
+	struct account *acc;
 	struct sa sa_addr;
+	size_t len;
+	bool uri_is_ip;
+	int err = 0;
+
+	if (!ua || !buf || !uri)
+		return EINVAL;
+
+	acc = ua->acc;
 
 	/* Skip initial whitespace */
 	while (isspace(*uri))
@@ -763,23 +769,23 @@ static int uri_complete(struct ua *ua, struct mbuf *buf, const char *uri)
 	if (0 != re_regex(uri, len, "[^@]+@[^]+", NULL, NULL) &&
 		1 != uri_is_ip) {
 #if HAVE_INET6
-		if (AF_INET6 == ua->acc->luri.af)
+		if (AF_INET6 == acc->luri.af)
 			err |= mbuf_printf(buf, "@[%r]",
-					   &ua->acc->luri.host);
+					   &acc->luri.host);
 		else
 #endif
 			err |= mbuf_printf(buf, "@%r",
-					   &ua->acc->luri.host);
+					   &acc->luri.host);
 
 		/* Also append port if specified and not 5060 */
-		switch (ua->acc->luri.port) {
+		switch (acc->luri.port) {
 
 		case 0:
 		case SIP_PORT:
 			break;
 
 		default:
-			err |= mbuf_printf(buf, ":%u", ua->acc->luri.port);
+			err |= mbuf_printf(buf, ":%u", acc->luri.port);
 			break;
 		}
 	}
@@ -819,7 +825,7 @@ int ua_connect(struct ua *ua, struct call **callp,
 	if (params)
 		err |= mbuf_printf(dialbuf, "<");
 
-	err |= uri_complete(ua, dialbuf, uri);
+	err |= ua_uri_complete(ua, dialbuf, uri);
 
 	if (params) {
 		err |= mbuf_printf(dialbuf, ";%s", params);
@@ -1006,7 +1012,7 @@ int ua_options_send(struct ua *ua, const char *uri,
 	if (!dialbuf)
 		return ENOMEM;
 
-	err = uri_complete(ua, dialbuf, uri);
+	err = ua_uri_complete(ua, dialbuf, uri);
 	if (err)
 		goto out;
 

@@ -464,9 +464,6 @@ static void vidsrc_frame_handler(struct vidframe *frame, uint64_t timestamp,
 
 	MAGIC_CHECK(vtx->video);
 
-	/* XXX: save timestamp(s) and pass to encoder */
-	(void)timestamp;
-
 	++vtx->frames;
 
 	++vtx->stats.src_frames;
@@ -643,9 +640,6 @@ static int video_stream_decode(struct vrx *vrx, const struct rtp_header *hdr,
 			  timestamp_calc_extended(vrx->ts_recv.num_wraps,
 						  vrx->ts_recv.last));
 
-	/* XXX: pass timestamp to decoder, filters, display */
-	(void)timestamp;
-
 	frame->data[0] = NULL;
 	err = vrx->vc->dech(vrx->dec, frame, &intra, hdr->m, hdr->seq, mb);
 	if (err) {
@@ -696,7 +690,7 @@ static int video_stream_decode(struct vrx *vrx, const struct rtp_header *hdr,
 
 	++vrx->stats.disp_frames;
 
-	err = vidisp_display(vrx->vidisp, v->peer, frame);
+	err = vidisp_display(vrx->vidisp, v->peer, frame, timestamp);
 	frame_filt = mem_deref(frame_filt);
 	if (err == ENODEV) {
 		warning("video: video-display was closed\n");
