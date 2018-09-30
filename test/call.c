@@ -24,7 +24,8 @@ enum action {
 	ACTION_RECANCEL = 0,
 	ACTION_HANGUP_A,
 	ACTION_HANGUP_B,
-	ACTION_NOTHING
+	ACTION_NOTHING,
+	ACTION_TRANSFER
 };
 
 struct agent {
@@ -39,15 +40,19 @@ struct agent {
 	unsigned n_established;
 	unsigned n_closed;
 	unsigned n_dtmf_recv;
+	unsigned n_transfer;
+	unsigned n_mediaenc;
 };
 
 struct fixture {
 	uint32_t magic;
-	struct agent a, b;
-	struct sa laddr_sip;
+	struct agent a, b, c;
+	struct sa laddr_udp;
+	struct sa laddr_tcp;
 	enum behaviour behaviour;
 	enum action estab_action;
 	char buri[256];
+	char buri_tcp[256];
 	int err;
 	unsigned exp_estab;
 	unsigned exp_closed;
@@ -59,8 +64,9 @@ struct fixture {
 									\
 	f->a.fix = f;							\
 	f->b.fix = f;							\
+	f->c.fix = f;							\
 									\
-	err = ua_init("test", true, true, true, false);			\
+	err = ua_init("test", true, true, false, false);		\
 	TEST_ERR(err);							\
 									\
 	f->magic = MAGIC;						\
@@ -81,11 +87,21 @@ struct fixture {
 	err = uag_event_register(event_handler, f);			\
 	TEST_ERR(err);							\
 									\
-	err = sip_transp_laddr(uag_sip(), &f->laddr_sip,		\
+	err = sip_transp_laddr(uag_sip(), &f->laddr_udp,		\
 			       SIP_TRANSP_UDP, NULL);			\
 	TEST_ERR(err);							\
 									\
-	re_snprintf(f->buri, sizeof(f->buri), "sip:b@%J", &f->laddr_sip);
+	err = sip_transp_laddr(uag_sip(), &f->laddr_tcp,		\
+			       SIP_TRANSP_TCP, NULL);			\
+	TEST_ERR(err);							\
+									\
+	debug("test: local SIP transp: UDP=%J, TCP=%J\n",		\
+	      &f->laddr_udp, &f->laddr_tcp);				\
+									\
+	re_snprintf(f->buri, sizeof(f->buri),				\
+		    "sip:b@%J", &f->laddr_udp);				\
+	re_snprintf(f->buri_tcp, sizeof(f->buri_tcp),			\
+		    "sip:b@%J;transport=tcp", &f->laddr_tcp);
 
 
 #define fixture_init(f)				\
@@ -93,6 +109,7 @@ struct fixture {
 
 
 #define fixture_close(f)			\
+	mem_deref(f->c.ua);			\
 	mem_deref(f->b.ua);			\
 	mem_deref(f->a.ua);			\
 						\
@@ -111,11 +128,14 @@ struct fixture {
 
 static const struct list *hdrs;
 
+
 static void event_handler(struct ua *ua, enum ua_event ev,
 			  struct call *call, const char *prm, void *arg)
 {
 	struct fixture *f = arg;
+	struct call *call2 = NULL;
 	struct agent *ag;
+	char curi[256];
 	int err = 0;
 	(void)prm;
 
@@ -131,6 +151,8 @@ static void event_handler(struct ua *ua, enum ua_event ev,
 		ag = &f->a;
 	else if (ua == f->b.ua)
 		ag = &f->b;
+	else if (ua == f->c.ua)
+		ag = &f->c;
 	else {
 		return;
 	}
@@ -212,6 +234,17 @@ static void event_handler(struct ua *ua, enum ua_event ev,
 			case ACTION_NOTHING:
 				/* Do nothing, wait */
 				break;
+
+			case ACTION_TRANSFER:
+				f->estab_action = ACTION_NOTHING;
+
+				re_snprintf(curi, sizeof(curi),
+					    "sip:c@%J", &f->laddr_udp);
+
+				err = call_transfer(ua_call(f->a.ua), curi);
+				if (err)
+					goto out;
+				break;
 			}
 		}
 		break;
@@ -229,6 +262,33 @@ static void event_handler(struct ua *ua, enum ua_event ev,
 
 			re_cancel();
 		}
+		break;
+
+	case UA_EVENT_CALL_TRANSFER:
+		++ag->n_transfer;
+
+		err = ua_call_alloc(&call2, ua, VIDMODE_ON, NULL, call,
+				    call_localuri(call), true);
+		if (!err) {
+			struct pl pl;
+
+			pl_set_str(&pl, prm);
+
+			err = call_connect(call2, &pl);
+			if (err) {
+				warning("ua: transfer: connect error: %m\n",
+					err);
+			}
+		}
+
+		if (err) {
+			(void)call_notify_sipfrag(call, 500, "Call Error");
+			mem_deref(call2);
+		}
+		break;
+
+	case UA_EVENT_CALL_MENC:
+		++ag->n_mediaenc;
 		break;
 
 	default:
@@ -260,7 +320,7 @@ int test_call_answer(void)
 	f->behaviour = BEHAVIOUR_ANSWER;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -294,7 +354,7 @@ int test_call_reject(void)
 	f->behaviour = BEHAVIOUR_REJECT;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -327,7 +387,7 @@ int test_call_af_mismatch(void)
 	ua_set_media_af(f->b.ua, AF_INET);
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -362,7 +422,7 @@ int test_call_answer_hangup_a(void)
 	f->estab_action = ACTION_HANGUP_A;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -400,7 +460,7 @@ int test_call_answer_hangup_b(void)
 	re_snprintf(uri, sizeof(uri), "<%s>", f->buri);
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, uri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, uri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -436,7 +496,7 @@ int test_call_rtp_timeout(void)
 	f->estab_action = ACTION_NOTHING;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	call = ua_call(f->a.ua);
@@ -499,7 +559,7 @@ int test_call_multiple(void)
 	 * Step 1 -- make 4 calls from A to B
 	 */
 	for (i=0; i<4; i++) {
-		err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+		err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 		TEST_ERR(err);
 	}
 
@@ -555,7 +615,7 @@ int test_call_multiple(void)
 	f->b.n_established = 0;
 	f->exp_estab = 2;
 	for (i=0; i<2; i++) {
-		err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+		err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 		TEST_ERR(err);
 	}
 
@@ -588,7 +648,7 @@ int test_call_max(void)
 
 	/* Make 2 calls, one should work and one should fail */
 	for (i=0; i<2; i++) {
-		err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+		err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 		TEST_ERR(err);
 	}
 
@@ -660,7 +720,7 @@ int test_call_dtmf(void)
 	f->behaviour = BEHAVIOUR_ANSWER;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -694,6 +754,19 @@ int test_call_dtmf(void)
 
 
 #ifdef USE_VIDEO
+static void mock_vidisp_handler(const struct vidframe *frame,
+				uint64_t timestamp, void *arg)
+{
+	struct fixture *fix = arg;
+	(void)frame;
+	(void)timestamp;
+	(void)fix;
+
+	/* Stop the test */
+	re_cancel();
+}
+
+
 int test_call_video(void)
 {
 	struct fixture fix, *f = &fix;
@@ -709,14 +782,14 @@ int test_call_video(void)
 	mock_vidcodec_register();
 	err = mock_vidsrc_register(&vidsrc);
 	TEST_ERR(err);
-	err = mock_vidisp_register(&vidisp);
+	err = mock_vidisp_register(&vidisp, mock_vidisp_handler, f);
 	TEST_ERR(err);
 
 	f->behaviour = BEHAVIOUR_ANSWER;
 	f->estab_action = ACTION_NOTHING;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_ON);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_ON);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -779,7 +852,7 @@ int test_call_aulevel(void)
 	f->estab_action = ACTION_NOTHING;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -816,7 +889,7 @@ int test_call_progress(void)
 	f->behaviour = BEHAVIOUR_PROGRESS;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -884,7 +957,7 @@ static int test_media_base(enum audio_mode txmode)
 	f->behaviour = BEHAVIOUR_ANSWER;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -959,7 +1032,7 @@ int test_call_mediaenc(void)
 	f->behaviour = BEHAVIOUR_ANSWER;
 
 	/* Make a call from A to B */
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 	TEST_ERR(err);
 
 	/* run main-loop with timeout, wait for events */
@@ -973,7 +1046,9 @@ int test_call_mediaenc(void)
 	ASSERT_EQ(1, fix.b.n_established);
 	ASSERT_EQ(0, fix.b.n_closed);
 
-	/* XXX: verify that the call was encrypted */
+	/* verify that the call was encrypted */
+	ASSERT_EQ(1, fix.a.n_mediaenc);
+	ASSERT_EQ(1, fix.b.n_mediaenc);
 
  out:
 	fixture_close(f);
@@ -1011,7 +1086,7 @@ int test_call_custom_headers(void)
 	err = custom_hdrs_add(&custom_hdrs, "X-CALL_ID", "%d", some_id);
 	err = custom_hdrs_add(&custom_hdrs, "X-HEADER_NAME", "%s", "VALUE");
 	ua_set_custom_hdrs(f->a.ua, &custom_hdrs);
-	err = ua_connect(f->a.ua, 0, NULL, f->buri, NULL, VIDMODE_OFF);
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
 
 	list_flush(&custom_hdrs);
 	TEST_ERR(err);
@@ -1054,6 +1129,92 @@ int test_call_custom_headers(void)
 	ASSERT_EQ(1, fix.b.n_incoming);
 	ASSERT_EQ(1, fix.b.n_established);
 	ASSERT_EQ(0, fix.b.n_closed);
+
+ out:
+	fixture_close(f);
+
+	return err;
+}
+
+
+int test_call_tcp(void)
+{
+	struct fixture fix, *f = &fix;
+	int err = 0;
+
+	fixture_init(f);
+
+	f->behaviour = BEHAVIOUR_ANSWER;
+
+	/* Make a call using TCP-transport */
+	err = ua_connect(f->a.ua, 0, NULL, f->buri_tcp, VIDMODE_OFF);
+	TEST_ERR(err);
+
+	/* run main-loop with timeout, wait for events */
+	err = re_main_timeout(5000);
+	TEST_ERR(err);
+	TEST_ERR(fix.err);
+
+	ASSERT_EQ(1, fix.a.n_established);
+	ASSERT_EQ(1, fix.b.n_established);
+
+ out:
+	fixture_close(f);
+
+	return err;
+}
+
+
+/*
+ *  Step 1. Call from A to B
+ *
+ *  Step 2. A transfer B to C
+ *
+ *  Step 3. Call between B and C
+ *          No call for A
+ */
+int test_call_transfer(void)
+{
+	struct fixture fix, *f = &fix;
+	int err = 0;
+
+	fixture_init(f);
+
+	/* Create a 3rd useragent needed for transfer */
+	err = ua_alloc(&f->c.ua, "C <sip:c@127.0.0.1>;regint=0");
+	TEST_ERR(err);
+
+	f->c.peer = &f->b;
+
+	f->behaviour = BEHAVIOUR_ANSWER;
+	f->estab_action = ACTION_TRANSFER;
+
+	err = ua_connect(f->a.ua, 0, NULL, f->buri, VIDMODE_OFF);
+	TEST_ERR(err);
+
+	/* run main-loop with timeout, wait for events */
+	err = re_main_timeout(5000);
+	TEST_ERR(err);
+	TEST_ERR(fix.err);
+
+	ASSERT_EQ(0, fix.a.n_incoming);
+	ASSERT_EQ(1, fix.a.n_established);
+	ASSERT_EQ(1, fix.a.n_closed);
+	ASSERT_EQ(0, fix.a.n_transfer);
+
+	ASSERT_EQ(1, fix.b.n_incoming);
+	ASSERT_EQ(2, fix.b.n_established);
+	ASSERT_EQ(1, fix.b.n_closed);
+	ASSERT_EQ(1, fix.b.n_transfer);
+
+	ASSERT_EQ(1, fix.c.n_incoming);
+	ASSERT_EQ(1, fix.c.n_established);
+	ASSERT_EQ(0, fix.c.n_closed);
+	ASSERT_EQ(0, fix.c.n_transfer);
+
+	ASSERT_EQ(0, list_count(ua_calls(f->a.ua)));
+	ASSERT_EQ(1, list_count(ua_calls(f->b.ua)));
+	ASSERT_EQ(1, list_count(ua_calls(f->c.ua)));
 
  out:
 	fixture_close(f);

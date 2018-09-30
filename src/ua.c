@@ -88,13 +88,6 @@ static struct {
 };
 
 
-/* prototypes */
-static int ua_call_alloc(struct call **callp, struct ua *ua,
-			 enum vidmode vidmode, const struct sip_msg *msg,
-			 struct call *xcall, const char *local_uri,
-			 bool use_rtp);
-
-
 /* This function is called when all SIP transactions are done */
 static void exit_handler(void *arg)
 {
@@ -305,8 +298,6 @@ static void call_event_handler(struct call *call, enum call_event ev,
 {
 	struct ua *ua = arg;
 	const char *peeruri;
-	struct call *call2 = NULL;
-	int err;
 
 	MAGIC_CHECK(ua);
 
@@ -365,34 +356,7 @@ static void call_event_handler(struct call *call, enum call_event ev,
 		break;
 
 	case CALL_EVENT_TRANSFER:
-
-		/*
-		 * Create a new call to transfer target.
-		 *
-		 * NOTE: we will automatically connect a new call to the
-		 *       transfer target
-		 */
-
-		ua_printf(ua, "transferring call to %s\n", str);
-
-		err = ua_call_alloc(&call2, ua, VIDMODE_ON, NULL, call,
-				    call_localuri(call), true);
-		if (!err) {
-			struct pl pl;
-
-			pl_set_str(&pl, str);
-
-			err = call_connect(call2, &pl);
-			if (err) {
-				warning("ua: transfer: connect error: %m\n",
-					err);
-			}
-		}
-
-		if (err) {
-			(void)call_notify_sipfrag(call, 500, "Call Error");
-			mem_deref(call2);
-		}
+		ua_event(ua, UA_EVENT_CALL_TRANSFER, call, str);
 		break;
 
 	case CALL_EVENT_TRANSFER_FAILED:
@@ -426,20 +390,18 @@ static void call_dtmf_handler(struct call *call, char key, void *arg)
 }
 
 
-static int ua_call_alloc(struct call **callp, struct ua *ua,
-			 enum vidmode vidmode, const struct sip_msg *msg,
-			 struct call *xcall, const char *local_uri,
-			 bool use_rtp)
+int ua_call_alloc(struct call **callp, struct ua *ua,
+		  enum vidmode vidmode, const struct sip_msg *msg,
+		  struct call *xcall, const char *local_uri,
+		  bool use_rtp)
 {
 	const struct network *net = baresip_network();
 	struct call_prm cprm;
 	int af = AF_UNSPEC;
 	int err;
 
-	if (*callp) {
-		warning("ua: call_alloc: call is already allocated\n");
-		return EALREADY;
-	}
+	if (!callp || !ua)
+		return EINVAL;
 
 	/* 1. if AF_MEDIA is set, we prefer it
 	 * 2. otherwise fall back to SIP AF
@@ -800,42 +762,31 @@ int ua_uri_complete(struct ua *ua, struct mbuf *buf, const char *uri)
  * @param ua        User-Agent
  * @param callp     Optional pointer to allocated call object
  * @param from_uri  Optional From uri, or NULL for default AOR
- * @param uri       SIP uri to connect to
- * @param params    Optional URI parameters
+ * @param req_uri   SIP uri to connect to
  * @param vmode     Video mode
  *
  * @return 0 if success, otherwise errorcode
  */
 int ua_connect(struct ua *ua, struct call **callp,
-	       const char *from_uri, const char *uri,
-	       const char *params, enum vidmode vmode)
+	       const char *from_uri, const char *req_uri,
+	       enum vidmode vmode)
 {
 	struct call *call = NULL;
 	struct mbuf *dialbuf;
 	struct pl pl;
 	int err = 0;
 
-	if (!ua || !str_isset(uri))
+	if (!ua || !str_isset(req_uri))
 		return EINVAL;
 
 	dialbuf = mbuf_alloc(64);
 	if (!dialbuf)
 		return ENOMEM;
 
-	if (params)
-		err |= mbuf_printf(dialbuf, "<");
-
-	err |= ua_uri_complete(ua, dialbuf, uri);
-
-	if (params) {
-		err |= mbuf_printf(dialbuf, ";%s", params);
-	}
+	err |= ua_uri_complete(ua, dialbuf, req_uri);
 
 	/* Append any optional URI parameters */
 	err |= mbuf_write_pl(dialbuf, &ua->acc->luri.params);
-
-	if (params)
-		err |= mbuf_printf(dialbuf, ">");
 
 	if (err)
 		goto out;
@@ -1529,7 +1480,7 @@ void ua_close(void)
 void ua_stop_all(bool forced)
 {
 	struct le *le;
-	bool ext_ref = false;
+	unsigned ext_ref = 0;
 
 	info("ua: stop all (forced=%d)\n", forced);
 
@@ -1546,14 +1497,15 @@ void ua_stop_all(bool forced)
 			list_flush(&ua->calls);
 			mem_deref(ua);
 
-			ext_ref = true;
+			++ext_ref;
 		}
 
 		ua_event(ua, UA_EVENT_SHUTDOWN, NULL, NULL);
 	}
 
 	if (ext_ref) {
-		info("ua: in use by app module, deferring module unloading\n");
+		info("ua: in use (%u) by app module"
+		     ", deferring module unloading\n", ext_ref);
 		return;
 	}
 	else {
@@ -1905,6 +1857,8 @@ struct list *uag_list(void)
 
 /**
  * Return list of methods supported by the UA
+ *
+ * @param ua User-Agent
  *
  * @return String of supported methods
  */
