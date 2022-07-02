@@ -360,7 +360,7 @@ ifneq ($(USE_WINWAVE),)
 MODULES   += winwave
 endif
 ifneq ($(USE_X11),)
-MODULES   += x11
+MODULES   += x11 x11grab
 endif
 ifneq ($(USE_ZRTP),)
 MODULES   += zrtp
