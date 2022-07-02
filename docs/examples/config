@@ -139,6 +139,7 @@ module			alsa.so
 
 # Video source modules
 #module			v4l2.so
+#module			x11grab.so
 #module			vidbridge.so
 
 # Video display modules
