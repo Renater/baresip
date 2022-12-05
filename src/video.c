@@ -617,9 +617,9 @@ static void send_fir(struct stream *s, bool pli)
 			err = rtcp_send_pli(stream_rtp_sock(s), ssrc);
 	}
 	else
-		err = rtcp_send_fir(stream_rtp_sock(s),
-				    rtp_sess_ssrc(stream_rtp_sock(s)));
-
+		err = rtcp_send_fir_rfc5104(stream_rtp_sock(s), rtp_sess_ssrc(stream_rtp_sock(s)), 0);
+		//err = rtcp_send_fir(stream_rtp_sock(s),
+		//		    rtp_sess_ssrc(stream_rtp_sock(s)));
 	if (err) {
 		warning("video: failed to send RTCP %s: %m\n",
 			pli ? "PLI" : "FIR", err);
