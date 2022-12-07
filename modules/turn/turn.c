@@ -49,6 +49,7 @@ struct mnat_media {
 		struct tls_conn *tlsc;
 		struct mbuf *mb;
 		unsigned ix;
+		uint64_t token;
 	} compv[COMPC];
 };
 
@@ -196,16 +197,27 @@ static void turn_handler(int err, uint16_t scode, const char *reason,
 			 void *arg)
 {
 	struct comp *comp = arg;
+	uint64_t token;
 	struct mnat_media *m = comp->m;
 	(void)mapped_addr;
 	(void)msg;
 
 	if (!err && !scode) {
 
-		const struct comp *other = &m->compv[comp->ix ^ 1];
+		struct comp *other = &m->compv[comp->ix ^ 1];
 
-		if (comp->ix == 0)
-			sdp_media_set_laddr(m->sdpm, relay_addr);
+		struct stun_attr *token_attr = stun_msg_attr(msg, STUN_ATTR_RSV_TOKEN);
+		if (token_attr)
+		    token = token_attr->v.uint64;
+
+		if (comp->ix == 0) {
+		    sdp_media_set_laddr(m->sdpm, relay_addr);
+		    err = turnc_alloc(&other->turnc, NULL,
+		          IPPROTO_UDP, other->sock, LAYER,
+		          &m->sess->srv, m->sess->user, m->sess->pass,
+		          TURN_DEFAULT_LIFETIME, &token,
+		          turn_handler, other);
+		}
 		else
 			sdp_media_set_laddr_rtcp(m->sdpm, relay_addr);
 
@@ -238,7 +250,7 @@ static void tcp_estab_handler(void *arg)
 	err = turnc_alloc(&comp->turnc, NULL, IPPROTO_TCP, comp->tc, 0,
 			  &m->sess->srv,
 			  m->sess->user, m->sess->pass,
-			  TURN_DEFAULT_LIFETIME, turn_handler, comp);
+			  TURN_DEFAULT_LIFETIME, NULL, turn_handler, comp);
 	if (err) {
 		m->sess->estabh(err, 0, NULL, m->sess->arg);
 	}
@@ -259,7 +271,7 @@ static int media_start(struct mnat_sess *sess, struct mnat_media *m)
 	unsigned i;
 	int err = 0;
 
-	for (i=0; i<COMPC; i++) {
+	for (i=0; i<1; i++) {
 
 		struct comp *comp = &m->compv[i];
 
@@ -272,7 +284,7 @@ static int media_start(struct mnat_sess *sess, struct mnat_media *m)
 			err |= turnc_alloc(&comp->turnc, NULL,
 					   IPPROTO_UDP, comp->sock, LAYER,
 					   &sess->srv, sess->user, sess->pass,
-					   TURN_DEFAULT_LIFETIME,
+					   TURN_DEFAULT_LIFETIME, NULL,
 					   turn_handler, comp);
 			break;
 
