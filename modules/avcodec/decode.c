@@ -104,6 +104,8 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
 static int init_decoder(struct viddec_state *st, const char *name)
 {
 	enum AVCodecID codec_id;
+	char thread_type[64] = "2";
+	char thread_count[64] = "1";
 
 	codec_id = avcodec_resolve_codecid(name);
 	if (codec_id == AV_CODEC_ID_NONE)
@@ -151,6 +153,11 @@ static int init_decoder(struct viddec_state *st, const char *name)
 		info("avcodec: decode: hardware accel disabled\n");
 	}
 #endif
+
+	conf_get_str(conf_cur(), "thread_type", thread_type, sizeof(thread_type));
+	conf_get_str(conf_cur(), "thread_count", thread_count, sizeof(thread_count));
+	st->ctx->thread_type = atoi(thread_type);
+	st->ctx->thread_count = atoi(thread_count);
 
 	if (avcodec_open2(st->ctx, st->codec, NULL) < 0)
 		return ENOENT;
