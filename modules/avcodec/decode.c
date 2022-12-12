@@ -103,8 +103,8 @@ static enum AVPixelFormat get_hw_format(AVCodecContext *ctx,
 static int init_decoder(struct viddec_state *st, const char *name)
 {
 	enum AVCodecID codec_id;
-	char thread_type[64] = "2";
-	char thread_count[64] = "1";
+	char thread_type[1] = "2";
+	char thread_count[8] = "1";
 
 	codec_id = avcodec_resolve_codecid(name);
 	if (codec_id == AV_CODEC_ID_NONE)
