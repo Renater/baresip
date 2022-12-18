@@ -1339,6 +1339,8 @@ static bool call_need_modify(const struct call *call)
 int call_answer(struct call *call, uint16_t scode, enum vidmode vmode)
 {
 	struct mbuf *desc;
+	char public_address[16] = "";
+	struct sa pub_addr;
 	int err;
 
 	if (!call || !call->sess)
@@ -1368,7 +1370,14 @@ int call_answer(struct call *call, uint16_t scode, enum vidmode vmode)
 	ua_event(call->ua, UA_EVENT_CALL_LOCAL_SDP, call,
 		 "%s", !call->got_offer ? "offer" : "answer");
 
-	err = sdp_encode(&desc, call->sdp, !call->got_offer);
+	sa_ntop(sdp_session_laddr(call->sdp), public_address,
+	        sizeof(public_address) );
+
+	conf_get_str(conf_cur(), "public_address", public_address, sizeof(public_address));
+	err = sa_set_str(&pub_addr, public_address, 0);
+
+	sdp_session_set_laddr(call->sdp, &pub_addr);
+	err |= sdp_encode(&desc, call->sdp, !call->got_offer);
 	if (err)
 		return err;
 
