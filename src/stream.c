@@ -94,7 +94,7 @@ struct stream {
 };
 
 
-static void print_rtp_stats(const struct stream *s)
+void print_rtp_stats(const struct stream *s)
 {
 	uint32_t tx_n_packets = metric_n_packets(s->tx.metric);
 	uint32_t rx_n_packets = metric_n_packets(s->rx.metric);

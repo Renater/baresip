@@ -1658,6 +1658,7 @@ int video_debug(struct re_printf *pf, const struct video *v)
 		err |= vrx_print_pipeline(pf, vrx);
 
 	err |= stream_debug(pf, v->strm);
+	print_rtp_stats(v->strm);
 
 	return err;
 }

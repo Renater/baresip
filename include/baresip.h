@@ -1429,6 +1429,7 @@ const char *stream_peer(const struct stream *strm);
 int  stream_bundle_init(struct stream *strm, bool offerer);
 int  stream_debug(struct re_printf *pf, const struct stream *s);
 void stream_enable_rtp_timeout(struct stream *strm, uint32_t timeout_ms);
+void print_rtp_stats(const struct stream *s);
 
 
 /*
