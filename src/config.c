@@ -345,6 +345,9 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 	if (0 == conf_get_u32(conf, "sip_tos", &v))
 		cfg->sip.tos = v;
 
+	(void)conf_get_bool(conf, "sip_media_control",
+			    &cfg->sip.media_control);
+
 	/* Call */
 	(void)conf_get_u32(conf, "call_local_timeout",
 			   &cfg->call.local_timeout);

@@ -84,8 +84,17 @@ struct call {
 	bool evstop;               /**< UA events stopped flag              */
 };
 
+/** SIP info requests */
+enum sip_info_req {
+	DTMF = 0,
+	PICTURE_FAST_UPDATE,
+};
+
 
 static int send_invite(struct call *call);
+static int send_info(struct sipsess *sess,
+		     const char* content_type, const char* content,
+		     void *arg, const char *fmt, ...);
 static int send_dtmf_info(struct call *call, char key);
 
 
@@ -1737,6 +1746,35 @@ int call_send_digit(struct call *call, char key)
 
 
 /**
+ * Send a picture_fast_update request to the peer
+ *
+ * @param call  Call object
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+int call_send_pfu(struct call *call)
+{
+	int err = 0;
+
+	if (!call)
+		return EINVAL;
+
+	err = send_info(call->sess,
+			"application/media_control+xml",
+			"<?xml version=\"1.0\" encoding=\"utf-8\" ?>"
+			"<media_control><vc_primitive><to_encoder>"
+			"<picture_fast_update>"
+			"</picture_fast_update>"
+			"</to_encoder></vc_primitive></media_control>",
+			NULL, NULL);
+	if (err) {
+		warning("call: picture_fast_update request failed (%m)\n", err);
+	}
+	return err;
+}
+
+
+/**
  * Get the User-Agent for the call
  *
  * @param call Call object
@@ -1905,6 +1943,23 @@ static void sipsess_estab_handler(const struct sip_msg *msg, void *arg)
 	call_event_handler(call, CALL_EVENT_ESTABLISHED, call->peer_uri);
 }
 
+static void call_handle_info_req(struct call *call, const struct sip_msg *req)
+{
+	struct pl body;
+	int err;
+
+	pl_set_mbuf(&body, req->mb);
+
+	/* Poor-mans XML parsing */
+	if (0 == re_regex(body.p, body.l, "picture_fast_update")) {
+		debug("call: receive media control: fast_update=%d\n");
+		err = video_update(call->video, call->peer_uri);
+		if (err) {
+			warning("call: could not update video: %m\n", err);
+		}
+	}
+}
+
 
 static void dtmfend_handler(void *arg)
 {
@@ -1916,15 +1971,21 @@ static void dtmfend_handler(void *arg)
 
 
 static void sipsess_send_info_handler(int err, const struct sip_msg *msg,
-				void *arg)
+				      void *arg)
 {
 	(void)arg;
 
-	if (err)
-		warning("call: sending DTMF INFO failed (%m)", err);
-	else if (msg && msg->scode != 200)
-		warning("call: sending DTMF INFO failed (scode: %d)",
-				msg->scode);
+	//switch (req) {
+	//	case DTMF:
+			if (err)
+				warning("call: sending DTMF INFO failed (%m)", err);
+			else if (msg && msg->scode != 200)
+				warning("call: sending DTMF INFO failed (scode: %d)",
+						msg->scode);
+	//		break;
+	//	case  PICTURE_FAST_UPDATE:
+	//		break;
+	//}
 }
 
 
@@ -1963,6 +2024,11 @@ static void sipsess_info_handler(struct sip *sip, const struct sip_msg *msg,
 				call->dtmfh(call, s, call->arg);
 			}
 		}
+	}
+	else if (msg_ctype_cmp(&msg->ctyp,
+			       "application", "media_control+xml")) {
+		call_handle_info_req(call, msg);
+		(void)sip_reply(sip, msg, 200, "OK");
 	}
 	else {
 		(void)sip_reply(sip, msg, 488, "Not Acceptable Here");
@@ -2445,9 +2511,36 @@ static int send_invite(struct call *call)
 }
 
 
-static int send_dtmf_info(struct call *call, char key)
+static int send_info(struct sipsess *sess,
+		     const char* content_type, const char* content,
+		     void *arg, const char *fmt, ...)
 {
 	struct mbuf *body;
+	va_list ap;
+	body = mbuf_alloc(1024);
+	int err;
+
+	va_start(ap, fmt);
+	(void)	mbuf_printf(body, content, fmt, ap);
+	va_end(ap);
+	mbuf_set_pos(body, 0);
+
+	err = sipsess_info(sess, content_type, body,
+			   sipsess_send_info_handler, arg);
+
+	if (err) {
+		goto out;
+	}
+
+ out:
+	mem_deref(body);
+
+	return err;
+}
+
+
+static int send_dtmf_info(struct call *call, char key)
+{
 	int err;
 
 	if ((key < '0' || key > '9') &&
@@ -2456,20 +2549,13 @@ static int send_dtmf_info(struct call *call, char key)
 	    (key != '#'))
 		return EINVAL;
 
-	body = mbuf_alloc(25);
-	mbuf_printf(body, "Signal=%c\r\nDuration=250\r\n", key);
-	mbuf_set_pos(body, 0);
-
-	err = sipsess_info(call->sess, "application/dtmf-relay", body,
-			   sipsess_send_info_handler, call);
+	err = send_info(call->sess,
+			"application/dtmf-relay",
+			"Signal=%c\r\nDuration=250\r\n",
+			call, &key);
 	if (err) {
 		warning("call: sipsess_info for DTMF failed (%m)\n", err);
-		goto out;
 	}
-
- out:
-	mem_deref(body);
-
 	return err;
 }
 

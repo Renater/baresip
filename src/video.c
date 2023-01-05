@@ -607,22 +607,47 @@ static void picup_tmr_handler(void *arg)
 
 static void send_fir(struct stream *s, bool pli)
 {
+	struct call *cur_call;
+	struct ua *local_ua ;
+	char *local_uri;
+	bool sip_media_control=false;
 	int err;
+	struct config *cur_conf;
 
-	if (pli) {
-		uint32_t ssrc;
+	cur_conf = conf_config();
+	if (cur_conf)
+		sip_media_control = cur_conf->sip.media_control;
 
-		err = stream_ssrc_rx(s, &ssrc);
-		if (!err)
-			err = rtcp_send_pli(stream_rtp_sock(s), ssrc);
+	if(sip_media_control) {
+		local_uri = stream_cname(s);
+		if (local_uri)
+			local_ua = uag_find_requri(local_uri);
+
+		if (local_ua)
+			cur_call = ua_call(local_ua);
+
+		if (cur_call)
+			err = call_send_pfu(cur_call);
+
+		if (err)
+			warning("video: failed to send picture_fast_update %m\n", err);
 	}
-	else
-		err = rtcp_send_fir_rfc5104(stream_rtp_sock(s), rtp_sess_ssrc(stream_rtp_sock(s)), 0);
-		//err = rtcp_send_fir(stream_rtp_sock(s),
-		//		    rtp_sess_ssrc(stream_rtp_sock(s)));
-	if (err) {
-		warning("video: failed to send RTCP %s: %m\n",
-			pli ? "PLI" : "FIR", err);
+	else {
+		if (pli) {
+			uint32_t ssrc;
+
+			err = stream_ssrc_rx(s, &ssrc);
+			if (!err)
+				err = rtcp_send_pli(stream_rtp_sock(s), ssrc);
+		}
+		else
+			err = rtcp_send_fir_rfc5104(stream_rtp_sock(s), rtp_sess_ssrc(stream_rtp_sock(s)), 0);
+			//err = rtcp_send_fir(stream_rtp_sock(s),
+			//		    rtp_sess_ssrc(stream_rtp_sock(s)));
+		if (err) {
+			warning("video: failed to send RTCP %s: %m\n",
+				pli ? "PLI" : "FIR", err);
+		}
 	}
 }
 

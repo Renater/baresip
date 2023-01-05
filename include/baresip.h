@@ -205,6 +205,7 @@ int  call_modify(struct call *call);
 int  call_hold(struct call *call, bool hold);
 int  call_set_video_dir(struct call *call, enum sdp_dir dir);
 int  call_send_digit(struct call *call, char key);
+int  call_send_pfu(struct call *call);
 bool call_has_audio(const struct call *call);
 bool call_has_video(const struct call *call);
 bool call_early_video_available(const struct call *call);
@@ -323,6 +324,7 @@ struct config_sip {
 	enum sip_transp transp; /**< Default outgoing SIP transport protocol */
 	bool verify_server;     /**< Enable SIP TLS verify server   */
 	uint8_t tos;            /**< Type-of-Service for SIP        */
+	bool media_control;     /**< Media Control over SIP         */
 };
 
 /** Call config */
