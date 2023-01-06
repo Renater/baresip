@@ -1946,17 +1946,13 @@ static void sipsess_estab_handler(const struct sip_msg *msg, void *arg)
 static void call_handle_info_req(struct call *call, const struct sip_msg *req)
 {
 	struct pl body;
-	int err;
 
 	pl_set_mbuf(&body, req->mb);
 
 	/* Poor-mans XML parsing */
 	if (0 == re_regex(body.p, body.l, "picture_fast_update")) {
 		debug("call: receive media control: fast_update=%d\n");
-		err = video_update(call->video, call->peer_uri);
-		if (err) {
-			warning("call: could not update video: %m\n", err);
-		}
+		video_encode_refresh(call->video);
 	}
 }
 

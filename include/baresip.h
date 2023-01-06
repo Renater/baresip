@@ -1370,6 +1370,7 @@ void  video_set_devicename(struct video *v, const char *src, const char *disp);
 int   video_debug(struct re_printf *pf, const struct video *v);
 struct stream *video_strm(const struct video *v);
 const struct vidcodec *video_codec(const struct video *vid, bool tx);
+void video_encode_refresh(struct video *v);
 void video_sdp_attr_decode(struct video *v);
 
 double video_calc_seconds(uint64_t rtp_ts);

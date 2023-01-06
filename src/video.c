@@ -611,42 +611,43 @@ static void send_fir(struct stream *s, bool pli)
 	struct ua *local_ua ;
 	char *local_uri;
 	bool sip_media_control=false;
-	int err;
 	struct config *cur_conf;
+	int err;
 
-	cur_conf = conf_config();
-	if (cur_conf)
-		sip_media_control = cur_conf->sip.media_control;
+	if (pli) {
+		uint32_t ssrc;
 
-	if(sip_media_control) {
-		local_uri = stream_cname(s);
-		if (local_uri)
-			local_ua = uag_find_requri(local_uri);
-
-		if (local_ua)
-			cur_call = ua_call(local_ua);
-
-		if (cur_call)
-			err = call_send_pfu(cur_call);
-
+		err = stream_ssrc_rx(s, &ssrc);
+		if (!err)
+			err = rtcp_send_pli(stream_rtp_sock(s), ssrc);
 		if (err)
-			warning("video: failed to send picture_fast_update %m\n", err);
+			warning("video: failed to send PLI %m\n", err);
 	}
-	else {
-		if (pli) {
-			uint32_t ssrc;
+	else{
+		cur_conf = conf_config();
+		if (cur_conf)
+			sip_media_control = cur_conf->sip.media_control;
 
-			err = stream_ssrc_rx(s, &ssrc);
-			if (!err)
-				err = rtcp_send_pli(stream_rtp_sock(s), ssrc);
+		if(sip_media_control) {
+			local_uri = stream_cname(s);
+			if (local_uri)
+				local_ua = uag_find_requri(local_uri);
+
+			if (local_ua)
+				cur_call = ua_call(local_ua);
+
+			if (cur_call)
+				err = call_send_pfu(cur_call);
+
+			if (err)
+				warning("video: failed to send picture_fast_update %m\n", err);
 		}
-		else
+		else {
 			err = rtcp_send_fir_rfc5104(stream_rtp_sock(s), rtp_sess_ssrc(stream_rtp_sock(s)), 0);
 			//err = rtcp_send_fir(stream_rtp_sock(s),
 			//		    rtp_sess_ssrc(stream_rtp_sock(s)));
-		if (err) {
-			warning("video: failed to send RTCP %s: %m\n",
-				pli ? "PLI" : "FIR", err);
+			if (err)
+				warning("video: failed to send FIR %m\n", err);
 		}
 	}
 }
@@ -1768,4 +1769,19 @@ const struct vidcodec *video_codec(const struct video *vid, bool tx)
 		return NULL;
 
 	return tx ? vid->vtx.vc : vid->vrx.vc;
+}
+
+
+void video_encode_refresh(struct video *v)
+{
+	struct vtx *vtx;
+
+	if (v)
+		vtx = &v->vtx;
+	else
+		return;
+
+	mtx_lock(&vtx->lock_enc);
+	vtx->picup = true;
+	mtx_unlock(&vtx->lock_enc);
 }
