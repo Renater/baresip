@@ -643,9 +643,8 @@ static void send_fir(struct stream *s, bool pli)
 				warning("video: failed to send picture_fast_update %m\n", err);
 		}
 		else {
-			err = rtcp_send_fir_rfc5104(stream_rtp_sock(s), rtp_sess_ssrc(stream_rtp_sock(s)), 0);
-			//err = rtcp_send_fir(stream_rtp_sock(s),
-			//		    rtp_sess_ssrc(stream_rtp_sock(s)));
+			err = rtcp_send_fir(stream_rtp_sock(s),
+					    rtp_sess_ssrc(stream_rtp_sock(s)));
 			if (err)
 				warning("video: failed to send FIR %m\n", err);
 		}
