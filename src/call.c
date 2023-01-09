@@ -94,8 +94,12 @@ enum sip_info_req {
 static int send_invite(struct call *call);
 static int send_info(struct sipsess *sess,
 		     const char* content_type, const char* content,
+		     sip_resp_h *resph,
 		     void *arg, const char *fmt, ...);
 static int send_dtmf_info(struct call *call, char key);
+static void send_pfu_info_handler(int err,
+				  const struct sip_msg *msg,
+				  void *arg);
 
 
 static const char *state_name(enum call_state st)
@@ -1766,6 +1770,7 @@ int call_send_pfu(struct call *call)
 			"<picture_fast_update>"
 			"</picture_fast_update>"
 			"</to_encoder></vc_primitive></media_control>",
+			send_pfu_info_handler,
 			NULL, NULL);
 	if (err) {
 		warning("call: picture_fast_update request failed (%m)\n", err);
@@ -1966,22 +1971,37 @@ static void dtmfend_handler(void *arg)
 }
 
 
-static void sipsess_send_info_handler(int err, const struct sip_msg *msg,
-				      void *arg)
+static void send_dtmf_info_handler(int err,
+				   const struct sip_msg *msg,
+				   void *arg)
 {
 	(void)arg;
 
-	//switch (req) {
-	//	case DTMF:
-			if (err)
-				warning("call: sending DTMF INFO failed (%m)", err);
-			else if (msg && msg->scode != 200)
-				warning("call: sending DTMF INFO failed (scode: %d)",
-						msg->scode);
-	//		break;
-	//	case  PICTURE_FAST_UPDATE:
-	//		break;
-	//}
+	if (err)
+		warning("call: sending DTMF INFO failed (%m)", err);
+	else if (msg && msg->scode != 200)
+		warning("call: sending DTMF INFO failed (scode: %d)",
+				msg->scode);
+}
+
+
+static void send_pfu_info_handler(int err,
+				  const struct sip_msg *msg,
+				  void *arg)
+{
+	(void)arg;
+	struct config *cur_conf;
+
+	if (err)
+		warning("call: sending PICTURE_FAST_UPDATE INFO failed (%m)", err);
+	else if (msg && msg->scode != 200) {
+		warning("call: sending PICTURE_FAST_UPDATE INFO failed (scode: %d)",
+				msg->scode);
+
+		cur_conf = conf_config();
+		if (cur_conf)
+			cur_conf->sip.media_control = false;
+	}
 }
 
 
@@ -2509,6 +2529,7 @@ static int send_invite(struct call *call)
 
 static int send_info(struct sipsess *sess,
 		     const char* content_type, const char* content,
+		     sip_resp_h *resph,
 		     void *arg, const char *fmt, ...)
 {
 	struct mbuf *body;
@@ -2522,7 +2543,7 @@ static int send_info(struct sipsess *sess,
 	mbuf_set_pos(body, 0);
 
 	err = sipsess_info(sess, content_type, body,
-			   sipsess_send_info_handler, arg);
+			   resph, arg);
 
 	if (err) {
 		goto out;
@@ -2548,6 +2569,7 @@ static int send_dtmf_info(struct call *call, char key)
 	err = send_info(call->sess,
 			"application/dtmf-relay",
 			"Signal=%c\r\nDuration=250\r\n",
+			send_dtmf_info_handler,
 			call, &key);
 	if (err) {
 		warning("call: sipsess_info for DTMF failed (%m)\n", err);
