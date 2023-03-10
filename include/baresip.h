@@ -1077,6 +1077,7 @@ struct vidisp_st;
 /** Video Display parameters */
 struct vidisp_prm {
 	bool fullscreen;  /**< Enable fullscreen display                    */
+	char content[64];
 };
 
 typedef void (vidisp_resize_h)(const struct vidsz *size, void *arg);

@@ -158,6 +158,7 @@ struct video {
 	struct vrx vrx;         /**< Receive/decoder direction            */
 	struct tmr tmr;         /**< Timer for frame-rate estimation      */
 	char *peer;             /**< Peer URI                             */
+	char *content;          /**< Content type                         */
 	bool nack_pli;          /**< Send NACK/PLI to peer                */
 	video_err_h *errh;      /**< Error handler                        */
 	void *arg;              /**< Error handler argument               */
@@ -356,6 +357,7 @@ static void video_destructor(void *arg)
 	tmr_cancel(&v->tmr);
 	mem_deref(v->strm);
 	mem_deref(v->peer);
+	mem_deref(v->content);
 }
 
 
@@ -1055,6 +1057,7 @@ int video_alloc(struct video **vp, struct list *streaml,
 	if (content) {
 		err |= sdp_media_set_lattr(stream_sdpmedia(v->strm), true,
 					   "content", "%s", content);
+		err |= str_dup(&v->content, content);
 	}
 
 	if (err)
@@ -1127,6 +1130,7 @@ static void vidisp_resize_handler(const struct vidsz *sz, void *arg)
 static int set_vidisp(struct vrx *vrx)
 {
 	struct vidisp *vd;
+	char *content;
 	int err;
 
 	vrx->vidisp = mem_deref(vrx->vidisp);
@@ -1139,6 +1143,8 @@ static int set_vidisp(struct vrx *vrx)
 	if (!vd)
 		return ENOENT;
 
+	str_ncpy(&vrx->vidisp_prm.content, vrx->video->content,
+		 sizeof(vrx->video->content));
 	err = vd->alloch(&vrx->vidisp, vd, &vrx->vidisp_prm, vrx->device,
 			 vidisp_resize_handler, vrx);
 	if (err)
