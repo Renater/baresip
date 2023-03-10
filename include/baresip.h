@@ -399,6 +399,10 @@ struct config_net {
 	bool use_getaddrinfo;   /**< Use getaddrinfo for A/AAAA records */
 };
 
+/** BFCP **/
+struct config_bfcp {
+	char proto[16];         /**< BFCP Transport (optional)      */
+};
 
 /** Core configuration */
 struct config {
@@ -413,6 +417,7 @@ struct config {
 	struct config_avt avt;
 
 	struct config_net net;
+	struct config_bfcp bfcp;
 };
 
 int config_parse_conf(struct config *cfg, const struct conf *conf);

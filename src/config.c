@@ -462,6 +462,9 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 			    &cfg->net.use_getaddrinfo);
 	(void)conf_get_str(conf, "net_interface",
 			   cfg->net.ifname, sizeof(cfg->net.ifname));
+	/* BFCP */
+	(void)conf_get_str(conf, "bfcp_proto", cfg->bfcp.proto,
+			   sizeof(cfg->bfcp.proto));
 
 	return err;
 }
@@ -543,6 +546,9 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 "# Network\n"
 			 "net_interface\t\t%s\n"
 			 "\n"
+			 "# BFCP\n"
+			 "bfcp_proto\t\t%s\n"
+			 "\n"
 			 ,
 
 			 cfg->sip.local, cfg->sip.cert, cfg->sip.cafile,
@@ -591,7 +597,9 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 cfg->avt.rtp_stats ? "yes" : "no",
 			 cfg->avt.rtp_timeout,
 
-			 cfg->net.ifname
+			 cfg->net.ifname,
+
+			 cfg->bfcp.proto
 		   );
 
 	return err;
@@ -801,6 +809,10 @@ static int core_config_template(struct re_printf *pf, const struct config *cfg)
 			  "#file_channels\t\t1\n",
 			  cfg->avt.jbuf_del.min, cfg->avt.jbuf_del.max,
 			  default_interface_print, NULL);
+
+	err |= re_hprintf(pf,
+			  "\n# BFCP\n"
+			  "#bfcp_proto\t\tudp\n");
 
 	return err;
 }

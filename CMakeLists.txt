@@ -147,6 +147,7 @@ set(SRCS
   src/auplay.c
   src/ausrc.c
   src/baresip.c
+  src/bfcp.c
   src/bundle.c
   src/call.c
   src/cmd.c
