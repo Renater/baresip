@@ -10,6 +10,7 @@
 
 
 struct bfcp {
+	struct ua *ua;
 	struct bfcp_conn *conn;
 	struct sdp_media *sdpm;
 	const struct mnat *mnat; /**< Media NAT traversal module            */
@@ -117,11 +118,12 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 	switch (msg->prim) {
 
 	case BFCP_HELLO:
+		ua_event(bfcp->ua, UA_EVENT_CALL_BFCP, NULL, "BFCP_HELLO");
 		(void)bfcp_reply(bfcp->conn, msg, BFCP_HELLO_ACK, 0);
 		break;
 
 	case BFCP_FLOOR_REQUEST:
-		bfcp_msg_attr_apply(msg,print_attr,NULL);
+		ua_event(bfcp->ua, UA_EVENT_CALL_BFCP, NULL, "BFCP_FLOOR_REQUEST");
 		attr = bfcp_msg_attr(msg, BFCP_FLOOR_ID);
 		uint16_t attr_val = attr->v.u16;
 		uint16_t floor_request_id = 1;
@@ -134,6 +136,10 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 				 BFCP_OVERALL_REQ_STATUS, 1, &floor_request_id,
 				 BFCP_REQUEST_STATUS, 0, &reqstatus,
 				 BFCP_FLOOR_REQ_STATUS, 0, &attr_val);
+		break;
+
+	case BFCP_FLOOR_RELEASE:
+		ua_event(bfcp->ua, UA_EVENT_CALL_BFCP, NULL, "BFCP_FLOOR_RELEASE");
 		break;
 
 	default:
@@ -152,6 +158,7 @@ static void mnat_connected_handler(const struct sa *raddr1,
 }
 
 int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
+	       struct ua *ua,
 	       const char *proto, bool offerer,
 	       const struct mnat *mnat, struct mnat_sess *mnat_sess)
 {
@@ -160,7 +167,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	enum bfcp_transp transp;
 	int err;
 
-	if (!bfcpp || !sdp_sess)
+	if (!bfcpp || !sdp_sess || !ua)
 		return EINVAL;
 
 	transp = str2tp(proto);
@@ -170,6 +177,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 		return ENOMEM;
 
 	bfcp->active = offerer;
+	bfcp->ua = ua;
 
 	sa_init(&laddr, AF_INET);
 
@@ -219,7 +227,6 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 
 	if (mnat) {
 		info("bfcp: enabled medianat '%s' on UDP socket\n", mnat->id);
-	//bfcp->mnat = mnat;
 		err = mnat->mediah(&bfcp->mnat_st, mnat_sess,
 				   bfcp_sock(bfcp->conn), NULL, bfcp->sdpm, mnat_connected_handler, bfcp);
 		if (err)

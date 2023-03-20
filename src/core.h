@@ -111,6 +111,7 @@ void audio_sdp_attr_decode(struct audio *a);
 
 struct bfcp;
 int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
+	       struct ua *ua,
 	       const char *proto, bool offerer,
 	       const struct mnat *mnat, struct mnat_sess *mnat_sess);
 int bfcp_start(struct bfcp *bfcp);
