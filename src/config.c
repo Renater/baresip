@@ -465,6 +465,8 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 	/* BFCP */
 	(void)conf_get_str(conf, "bfcp_proto", cfg->bfcp.proto,
 			   sizeof(cfg->bfcp.proto));
+	(void)conf_get_str(conf, "bfcp_floorctrl", cfg->bfcp.floorctrl,
+			   sizeof(cfg->bfcp.floorctrl));
 
 	return err;
 }
@@ -548,6 +550,7 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 "\n"
 			 "# BFCP\n"
 			 "bfcp_proto\t\t%s\n"
+			 "bfcp_floorctrl\t\t%s\n"
 			 "\n"
 			 ,
 
@@ -599,7 +602,8 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 
 			 cfg->net.ifname,
 
-			 cfg->bfcp.proto
+			 cfg->bfcp.proto,
+			 cfg->bfcp.floorctrl
 		   );
 
 	return err;
@@ -812,7 +816,8 @@ static int core_config_template(struct re_printf *pf, const struct config *cfg)
 
 	err |= re_hprintf(pf,
 			  "\n# BFCP\n"
-			  "#bfcp_proto\t\tudp\n");
+			  "#bfcp_proto\t\tudp\n"
+			  "#bfcp_floorctrl\t\ts-only\n");
 
 	return err;
 }

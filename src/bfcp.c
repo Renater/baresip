@@ -13,7 +13,7 @@ struct bfcp {
 	struct ua *ua;
 	struct bfcp_conn *conn;
 	struct sdp_media *sdpm;
-	const struct mnat *mnat; /**< Media NAT traversal module            */
+	const struct mnat *mnat;
 	struct mnat_media *mnat_st;
 	bool active;
 
@@ -159,7 +159,7 @@ static void mnat_connected_handler(const struct sa *raddr1,
 
 int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	       struct ua *ua,
-	       const char *proto, bool offerer,
+	       const struct config_bfcp *bfcp_cfg, bool offerer,
 	       const struct mnat *mnat, struct mnat_sess *mnat_sess)
 {
 	struct bfcp *bfcp;
@@ -170,7 +170,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	if (!bfcpp || !sdp_sess || !ua)
 		return EINVAL;
 
-	transp = str2tp(proto);
+	transp = str2tp(bfcp_cfg->proto);
 
 	bfcp = mem_zalloc(sizeof(*bfcp), destructor);
 	if (!bfcp)
@@ -196,7 +196,9 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	if (err)
 		goto out;
 
-	err |= sdp_media_set_lattr(bfcp->sdpm, true, "floorctrl", "c-s");
+	err |= sdp_media_set_lattr(bfcp->sdpm, true, "floorctrl",
+				   str_isset(bfcp_cfg->floorctrl)?
+				   bfcp_cfg->floorctrl:"c-s");
 	err |= sdp_media_set_lattr(bfcp->sdpm, true, "setup",
 				   bfcp->active ? "active" : "actpass");
 
@@ -216,7 +218,8 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	bfcp->lfloorid = 2;
 	bfcp->lmstrm = 12;
 		err |= sdp_media_set_lattr(bfcp->sdpm, true, "floorid",
-					   "%u mstrm %u", bfcp->lfloorid, bfcp->lmstrm);
+					   "%u mstrm %u", bfcp->lfloorid,
+					   bfcp->lmstrm);
 
 		err |= sdp_media_set_lattr(bfcp->sdpm, true,
 					   "connection", "new");
@@ -228,14 +231,15 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	if (mnat) {
 		info("bfcp: enabled medianat '%s' on UDP socket\n", mnat->id);
 		err = mnat->mediah(&bfcp->mnat_st, mnat_sess,
-				   bfcp_sock(bfcp->conn), NULL, bfcp->sdpm, mnat_connected_handler, bfcp);
+				   bfcp_sock(bfcp->conn), NULL, bfcp->sdpm,
+				   mnat_connected_handler, bfcp);
 		if (err)
 			goto out;
 	}
 
 	info("bfcp: %s BFCP agent protocol '%s' on port %d\n",
 	     bfcp->active ? "Active" : "Passive",
-	     proto, sa_port(&laddr));
+	     bfcp_cfg->proto, sa_port(&laddr));
 
  out:
 	if (err)

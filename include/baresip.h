@@ -401,7 +401,8 @@ struct config_net {
 
 /** BFCP **/
 struct config_bfcp {
-	char proto[16];         /**< BFCP Transport (optional)      */
+	char proto[16];         /**< BFCP Transport              */
+	char floorctrl[16];     /**< BFCP floor control role     */
 };
 
 /** Core configuration */
