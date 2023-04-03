@@ -248,13 +248,10 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	err |= sdp_media_set_lattr(bfcp->sdpm, true, "setup",
 				   bfcp->active ? "active" : "actpass");
 
-#if 0
-	if (bfcp->active) {
+	if (/*bfcp->active*/false) {
 		err |= sdp_media_set_lattr(bfcp->sdpm, true,
 					   "connection", "new");
 	}
-#endif
-
 	else {
 		bfcp->lconfid = 1000 + (rand_u16() & 0xf);
 		bfcp->luserid = 1    + (rand_u16() & 0x7);
