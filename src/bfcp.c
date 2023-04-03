@@ -319,11 +319,11 @@ int bfcp_start(struct bfcp *bfcp)
 		if (str_str(floorctrl, "s")) {
 
 			paddr  = sdp_media_raddr(bfcp->sdpm);
-			confid = atoi(sdp_media_rattr(bfcp->sdpm, "confid"));
+			confid = 1;
 			if(sdp_media_rattr(bfcp->sdpm, "confid"))
 				confid = atoi(sdp_media_rattr(bfcp->sdpm, "confid"));
 
-			userid = atoi(sdp_media_rattr(bfcp->sdpm, "userid"));
+			userid = 1;
 			if(sdp_media_rattr(bfcp->sdpm, "userid"))
 				userid = atoi(sdp_media_rattr(bfcp->sdpm, "userid"));
 
