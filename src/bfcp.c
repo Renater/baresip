@@ -114,12 +114,57 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 	pf.vph = stdout_handler;
 	pf.arg = NULL;
 	//bfcp_msg_print(&pf, msg);
+	struct bfcp_supprim  supprim;
+	struct bfcp_supattr  supattr;
+	enum bfcp_prim  prim[] = { BFCP_FLOOR_REQUEST,
+				    BFCP_FLOOR_RELEASE,
+				    BFCP_FLOOR_REQUEST_QUERY,
+				    BFCP_FLOOR_REQUEST_STATUS,
+				    BFCP_USER_QUERY,
+				    BFCP_USER_STATUS,
+				    BFCP_FLOOR_QUERY,
+				    BFCP_FLOOR_STATUS,
+				    BFCP_CHAIR_ACTION,
+				    BFCP_CHAIR_ACTION_ACK,
+				    BFCP_HELLO,
+				    BFCP_HELLO_ACK,
+				    BFCP_ERROR,
+				    BFCP_FLOOR_REQ_STATUS_ACK,
+				    BFCP_FLOOR_STATUS_ACK,
+				    BFCP_GOODBYE,
+				    BFCP_GOODBYE_ACK };
+
+	enum bfcp_attrib  attrib[] = {  BFCP_BENEFICIARY_ID,
+					BFCP_FLOOR_ID,
+					BFCP_FLOOR_REQUEST_ID,
+					BFCP_PRIORITY,
+					BFCP_REQUEST_STATUS,
+					BFCP_ERROR_CODE,
+					BFCP_ERROR_INFO,
+					BFCP_PART_PROV_INFO,
+					BFCP_STATUS_INFO,
+					BFCP_SUPPORTED_ATTRS ,
+					BFCP_SUPPORTED_PRIMS,
+					BFCP_USER_DISP_NAME,
+					BFCP_USER_URI ,
+					BFCP_BENEFICIARY_INFO,
+					BFCP_FLOOR_REQ_INFO,
+					BFCP_REQUESTED_BY_INFO,
+					BFCP_FLOOR_REQ_STATUS,
+					BFCP_OVERALL_REQ_STATUS };
 
 	switch (msg->prim) {
 
 	case BFCP_HELLO:
+		supprim.primv = prim;
+		supprim.primc = sizeof(prim)/sizeof(prim[0]);
+		supattr.attrv = attrib;
+		supattr.attrc = sizeof(attrib)/sizeof(attrib[0]);
 		ua_event(bfcp->ua, UA_EVENT_CALL_BFCP, NULL, "BFCP_HELLO");
-		(void)bfcp_reply(bfcp->conn, msg, BFCP_HELLO_ACK, 0);
+		(void)bfcp_reply(bfcp->conn, msg,
+				 BFCP_HELLO_ACK, 2,
+				 BFCP_SUPPORTED_ATTRS, 0, &supattr,
+				 BFCP_SUPPORTED_PRIMS, 0, &supprim);
 		break;
 
 	case BFCP_FLOOR_REQUEST:
@@ -180,6 +225,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	bfcp->ua = ua;
 
 	sa_init(&laddr, AF_INET);
+	//sa_set_port(&laddr, 5050);
 
 	err = bfcp_listen(&bfcp->conn, transp, &laddr, uag_tls(),
 			  NULL, NULL, bfcp_msg_handler, NULL, bfcp);
@@ -202,10 +248,13 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	err |= sdp_media_set_lattr(bfcp->sdpm, true, "setup",
 				   bfcp->active ? "active" : "actpass");
 
+#if 0
 	if (bfcp->active) {
 		err |= sdp_media_set_lattr(bfcp->sdpm, true,
 					   "connection", "new");
 	}
+#endif
+
 	else {
 		bfcp->lconfid = 1000 + (rand_u16() & 0xf);
 		bfcp->luserid = 1    + (rand_u16() & 0x7);
@@ -215,8 +264,8 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 		err |= sdp_media_set_lattr(bfcp->sdpm, true, "userid",
 					   "%u", bfcp->luserid);
 
-	bfcp->lfloorid = 2;
-	bfcp->lmstrm = 12;
+	bfcp->lfloorid = 1;
+	bfcp->lmstrm = 3;
 		err |= sdp_media_set_lattr(bfcp->sdpm, true, "floorid",
 					   "%u mstrm %u", bfcp->lfloorid,
 					   bfcp->lmstrm);
@@ -257,6 +306,7 @@ int bfcp_start(struct bfcp *bfcp)
 	uint32_t confid = 0;
 	uint16_t userid = 0;
 	int err = 0;
+	char *floorctrl;
 
 	if (!bfcp)
 		return EINVAL;
@@ -266,15 +316,25 @@ int bfcp_start(struct bfcp *bfcp)
 		return 0;
 	}
 
-	if (bfcp->active) {
+	floorctrl = sdp_media_rattr(bfcp->sdpm, "floorctrl");
 
-		paddr  = sdp_media_raddr(bfcp->sdpm);
-		confid = sdp_media_rattr(bfcp->sdpm, "confid");
-		userid = sdp_media_rattr(bfcp->sdpm, "userid");
+	if (floorctrl )
+		if (str_str(floorctrl, "s")) {
 
-		err = bfcp_request(bfcp->conn, paddr, BFCP_VER2, BFCP_HELLO,
-				   confid, userid, bfcp_resp_handler, bfcp, 0);
-	}
+			paddr  = sdp_media_raddr(bfcp->sdpm);
+			confid = atoi(sdp_media_rattr(bfcp->sdpm, "confid"));
+			if(sdp_media_rattr(bfcp->sdpm, "confid"))
+				confid = atoi(sdp_media_rattr(bfcp->sdpm, "confid"));
+
+			userid = atoi(sdp_media_rattr(bfcp->sdpm, "userid"));
+			if(sdp_media_rattr(bfcp->sdpm, "userid"))
+				userid = atoi(sdp_media_rattr(bfcp->sdpm, "userid"));
+
+			uint16_t floor_id = 1;
+			err = bfcp_request(bfcp->conn, paddr, BFCP_VER1, BFCP_HELLO,
+					confid, userid, bfcp_resp_handler, bfcp, 1,
+					BFCP_FLOOR_ID, 0, &floor_id);
+		}
 
 	return err;
 }
