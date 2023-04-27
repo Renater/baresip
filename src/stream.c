@@ -253,6 +253,7 @@ static void check_rtp_handler(void *arg)
 			     sdp_media_name(strm->sdp), diff_ms);
 
 			stream_close(strm, ETIMEDOUT);
+			tmr_cancel(&strm->rx.tmr_rtp);
 		}
 	}
 	else {

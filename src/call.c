@@ -641,6 +641,7 @@ static void stream_rtpestab_handler(struct stream *strm, void *arg)
 	if(0==str_cmp(content, "slides")){
 		stream_enable_rtp_timeout(video_strm(call->video_bis), 1000);
 		video_start_display(call->video_bis, call->peer_uri);
+		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL, "VIDEO_SLIDES_START");
 		return;
 	}
 
@@ -702,6 +703,7 @@ static void stream_error_handler(struct stream *strm, int err, void *arg)
 
 	if(0==str_cmp(content, "slides")){
 		video_stop_display(call->video_bis);
+		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL, "VIDEO_SLIDES_STOP");
 		return;
 	}
 
