@@ -923,7 +923,6 @@ int call_streams_alloc(struct call *call)
 
 		if (str_isset(call->cfg->bfcp.proto)) {
 			err = bfcp_alloc(&call->bfcp, call->sdp,
-					 call->ua,
 					 &call->cfg->bfcp, !call->got_offer,
 					 acc->mnat, call->mnats);
 			if (err)

@@ -10,7 +10,6 @@
 
 
 struct bfcp {
-	struct ua *ua;
 	struct bfcp_conn *conn;
 	struct sdp_media *sdpm;
 	const struct mnat *mnat;
@@ -160,7 +159,6 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 		supprim.primc = sizeof(prim)/sizeof(prim[0]);
 		supattr.attrv = attrib;
 		supattr.attrc = sizeof(attrib)/sizeof(attrib[0]);
-		ua_event(bfcp->ua, UA_EVENT_CALL_BFCP, NULL, "BFCP_HELLO");
 		(void)bfcp_reply(bfcp->conn, msg,
 				 BFCP_HELLO_ACK, 2,
 				 BFCP_SUPPORTED_ATTRS, 0, &supattr,
@@ -168,7 +166,6 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 		break;
 
 	case BFCP_FLOOR_REQUEST:
-		ua_event(bfcp->ua, UA_EVENT_CALL_BFCP, NULL, "BFCP_FLOOR_REQUEST");
 		attr = bfcp_msg_attr(msg, BFCP_FLOOR_ID);
 		uint16_t attr_val = attr->v.u16;
 		uint16_t floor_request_id = 1;
@@ -184,7 +181,9 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 		break;
 
 	case BFCP_FLOOR_RELEASE:
-		ua_event(bfcp->ua, UA_EVENT_CALL_BFCP, NULL, "BFCP_FLOOR_RELEASE");
+		break;
+
+	case BFCP_HELLO_ACK:
 		break;
 
 	default:
@@ -203,7 +202,6 @@ static void mnat_connected_handler(const struct sa *raddr1,
 }
 
 int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
-	       struct ua *ua,
 	       const struct config_bfcp *bfcp_cfg, bool offerer,
 	       const struct mnat *mnat, struct mnat_sess *mnat_sess)
 {
@@ -212,7 +210,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	enum bfcp_transp transp;
 	int err;
 
-	if (!bfcpp || !sdp_sess || !ua)
+	if (!bfcpp || !sdp_sess)
 		return EINVAL;
 
 	transp = str2tp(bfcp_cfg->proto);
@@ -222,10 +220,8 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 		return ENOMEM;
 
 	bfcp->active = offerer;
-	bfcp->ua = ua;
 
 	sa_init(&laddr, AF_INET);
-	//sa_set_port(&laddr, 5050);
 
 	err = bfcp_listen(&bfcp->conn, transp, &laddr, uag_tls(),
 			  NULL, NULL, bfcp_msg_handler, NULL, bfcp);
@@ -248,7 +244,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	err |= sdp_media_set_lattr(bfcp->sdpm, true, "setup",
 				   bfcp->active ? "active" : "actpass");
 
-	if (/*bfcp->active*/false) {
+	if (bfcp->active) {
 		err |= sdp_media_set_lattr(bfcp->sdpm, true,
 					   "connection", "new");
 	}
