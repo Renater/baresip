@@ -36,8 +36,8 @@ struct call {
 	struct call *xcall;       /**< Cross ref Transfer call              */
 	struct list streaml;      /**< List of mediastreams (struct stream) */
 	struct audio *audio;      /**< Audio stream                         */
-	struct video *video;      /**< Video stream                         */
-	struct video *video_bis;  /**< Video stream                         */
+	struct video *video;      /**< Video main stream                    */
+	struct video *video_bis;  /**< Video slides stream                  */
 	struct bfcp *bfcp;        /**< BFCP                                 */
 	enum call_state state;    /**< Call state                           */
 	int32_t adelay;           /**< Auto answer delay in ms              */
@@ -631,7 +631,18 @@ static void stream_mnatconn_handler(struct stream *strm, void *arg)
 static void stream_rtpestab_handler(struct stream *strm, void *arg)
 {
 	struct call *call = arg;
+	char* content= NULL;
+	struct sdp_media *m ;
 	MAGIC_CHECK(call);
+
+	m = stream_sdpmedia(strm);
+	content = sdp_media_rattr_apply(m, "content" , NULL, NULL);
+
+	if(0==str_cmp(content, "slides")){
+		stream_enable_rtp_timeout(video_strm(call->video_bis), 1000);
+		video_start_display(call->video_bis, call->peer_uri);
+		return;
+	}
 
 	ua_event(call->ua, UA_EVENT_CALL_RTPESTAB, call,
 		 "%s", sdp_media_name(stream_sdpmedia(strm)));
@@ -651,8 +662,24 @@ static void stream_rtcp_handler(struct stream *strm,
 		if (call->config_avt.rtp_stats)
 			call_set_xrtpstat(call);
 
-		ua_event(call->ua, UA_EVENT_CALL_RTCP, call,
-			 "%s", sdp_media_name(stream_sdpmedia(strm)));
+		struct sdp_media *m ;
+		struct le *le;
+		int err;
+		char *content = NULL;
+
+		m = stream_sdpmedia(strm);
+		content = sdp_media_rattr_apply(m, "content" , NULL, NULL);
+
+		if( str_cmp(sdp_media_name(stream_sdpmedia(strm)),
+					   "video") == 0) {
+			ua_event(call->ua, UA_EVENT_CALL_RTCP, call,
+				 "%s-%s", sdp_media_name(stream_sdpmedia(strm)),
+				 content?content:"unknown");
+		}
+		else{
+			ua_event(call->ua, UA_EVENT_CALL_RTCP, call,
+				 "%s", sdp_media_name(stream_sdpmedia(strm)));
+		}
 		break;
 
 	case RTCP_APP:
@@ -666,7 +693,17 @@ static void stream_rtcp_handler(struct stream *strm,
 static void stream_error_handler(struct stream *strm, int err, void *arg)
 {
 	struct call *call = arg;
+	char* content= NULL;
+	struct sdp_media *m ;
 	MAGIC_CHECK(call);
+
+	m = stream_sdpmedia(strm);
+	content = sdp_media_rattr_apply(m, "content" , NULL, NULL);
+
+	if(0==str_cmp(content, "slides")){
+		video_stop_display(call->video_bis);
+		return;
+	}
 
 	info("call: error in \"%s\" rtp stream (%m)\n",
 		sdp_media_name(stream_sdpmedia(strm)), err);
@@ -2715,7 +2752,7 @@ struct audio *call_audio(const struct call *call)
 
 
 /**
- * Get the video object for the current call
+ * Get the main video object for the current call
  *
  * @param call  Call object
  *
@@ -2724,6 +2761,19 @@ struct audio *call_audio(const struct call *call)
 struct video *call_video(const struct call *call)
 {
 	return call ? call->video : NULL;
+}
+
+
+/**
+ * Get the slides video object for the current call
+ *
+ * @param call  Call object
+ *
+ * @return Video object
+ */
+struct video *call_video_bis(const struct call *call)
+{
+	return call ? call->video_bis : NULL;
 }
 
 

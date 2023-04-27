@@ -206,7 +206,8 @@ static void stream_close(struct stream *strm, int err)
 	stream_error_h *errorh = strm->errorh;
 
 	strm->terminated = true;
-	strm->errorh = NULL;
+	//strm->errorh = NULL;
+	strm->rx.rtp_estab = false;
 	jbuf_flush(strm->rx.jbuf);
 
 	if (errorh)
@@ -232,7 +233,7 @@ static void check_rtp_handler(void *arg)
 	/* We are in sendrecv mode, check when the last RTP packet
 	 * was received.
 	 */
-	if (sdp_media_dir(strm->sdp) == SDP_SENDRECV) {
+	if (sdp_media_dir(strm->sdp) & SDP_RECVONLY) {
 
 		diff_ms = (int)(now - strm->rx.ts_last);
 
@@ -1156,8 +1157,8 @@ void stream_enable_rtp_timeout(struct stream *strm, uint32_t timeout_ms)
 	if (!strm)
 		return;
 
-	if (!sdp_media_has_media(stream_sdpmedia(strm)))
-		return;
+	//if (!sdp_media_has_media(stream_sdpmedia(strm)))
+	//	return;
 
 	strm->rx.rtp_timeout = timeout_ms;
 

@@ -229,9 +229,12 @@ int event_encode_dict(struct odict *od, struct ua *ua, enum ua_event ev,
 
 		if (0 == str_casecmp(prm, "audio"))
 			strm = audio_strm(call_audio(call));
-		else if (0 == str_casecmp(prm, "video"))
-			strm = video_strm(call_video(call));
-
+		else if (NULL != strcasestr(prm, "video")){
+			if (NULL != strcasestr(prm, "main"))
+				strm = video_strm(call_video(call));
+			if (NULL != strcasestr(prm, "slides"))
+				strm = video_strm(call_video_bis(call));
+		}
 		err = add_rtcp_stats(od, stream_rtcp_stats(strm));
 		if (err)
 			goto out;
