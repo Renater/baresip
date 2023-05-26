@@ -205,7 +205,7 @@ static void stream_close(struct stream *strm, int err)
 {
 	stream_error_h *errorh = strm->errorh;
 
-	strm->terminated = true;
+	//strm->terminated = true;
 	//strm->errorh = NULL;
 	strm->rx.rtp_estab = false;
 	jbuf_flush(strm->rx.jbuf);

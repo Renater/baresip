@@ -416,6 +416,8 @@ struct config {
 	struct config_audio audio;
 
 	struct config_video video;
+	struct config_video slides;
+
 	struct config_avt avt;
 
 	struct config_net net;

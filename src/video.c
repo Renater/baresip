@@ -1023,7 +1023,11 @@ int video_alloc(struct video **vp, struct list *streaml,
 
 	MAGIC_INIT(v);
 
-	v->cfg = cfg->video;
+	if (NULL != strcasestr(content, "slides"))
+		v->cfg = cfg->slides;
+	else
+		v->cfg = cfg->video;
+
 	tmr_init(&v->tmr);
 
 	err = stream_alloc(&v->strm, streaml, stream_prm,
@@ -1473,7 +1477,7 @@ int video_encoder_set(struct video *v, struct vidcodec *vc,
 
 		prm.bitrate = v->cfg.bitrate;
 		prm.pktsize = 1280;
-		prm.fps     = get_fps(v);
+		prm.fps     = max(1.00, get_fps(v));
 		prm.max_fs  = -1;
 
 		info("Set video encoder: %s %s (%u bit/s, %.2f fps)\n",

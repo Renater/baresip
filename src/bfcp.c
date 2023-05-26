@@ -15,6 +15,7 @@ struct bfcp {
 	const struct mnat *mnat;
 	struct mnat_media *mnat_st;
 	bool active;
+	struct tmr tmr_hello;
 
 	/* server */
 	uint32_t lconfid;
@@ -28,6 +29,8 @@ struct bfcp {
 static void destructor(void *arg)
 {
 	struct bfcp *bfcp = arg;
+
+	tmr_cancel(&bfcp->tmr_hello);
 
 	mem_deref(bfcp->mnat_st);
 	mem_deref(bfcp->sdpm);
@@ -222,6 +225,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	bfcp->active = offerer;
 
 	sa_init(&laddr, AF_INET);
+	tmr_init(&bfcp->tmr_hello);
 
 	err = bfcp_listen(&bfcp->conn, transp, &laddr, uag_tls(),
 			  NULL, NULL, bfcp_msg_handler, NULL, bfcp);
@@ -279,6 +283,7 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 			goto out;
 	}
 
+
 	info("bfcp: %s BFCP agent protocol '%s' on port %d\n",
 	     bfcp->active ? "Active" : "Passive",
 	     bfcp_cfg->proto, sa_port(&laddr));
@@ -292,12 +297,35 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	return err;
 }
 
-
-int bfcp_start(struct bfcp *bfcp)
+int bfcp_send_hello(struct bfcp *bfcp)
 {
 	const struct sa *paddr;
 	uint32_t confid = 0;
 	uint16_t userid = 0;
+	int err = 0;
+
+	tmr_start(&bfcp->tmr_hello, 10000,bfcp_send_hello, bfcp);
+
+	paddr  = sdp_media_raddr(bfcp->sdpm);
+	confid = 1;
+	if(sdp_media_rattr(bfcp->sdpm, "confid"))
+		confid = atoi(sdp_media_rattr(bfcp->sdpm, "confid"));
+
+	userid = 1;
+	if(sdp_media_rattr(bfcp->sdpm, "userid"))
+		userid = atoi(sdp_media_rattr(bfcp->sdpm, "userid"));
+
+	uint16_t floor_id = 1;
+	err = bfcp_request(bfcp->conn, paddr, BFCP_VER1, BFCP_HELLO,
+			confid, userid, bfcp_resp_handler, bfcp, 1,
+			BFCP_FLOOR_ID, 0, &floor_id);
+
+	return err;
+
+}
+
+int bfcp_start(struct bfcp *bfcp)
+{
 	int err = 0;
 	char *floorctrl;
 
@@ -313,20 +341,7 @@ int bfcp_start(struct bfcp *bfcp)
 
 	if (floorctrl )
 		if (str_str(floorctrl, "s")) {
-
-			paddr  = sdp_media_raddr(bfcp->sdpm);
-			confid = 1;
-			if(sdp_media_rattr(bfcp->sdpm, "confid"))
-				confid = atoi(sdp_media_rattr(bfcp->sdpm, "confid"));
-
-			userid = 1;
-			if(sdp_media_rattr(bfcp->sdpm, "userid"))
-				userid = atoi(sdp_media_rattr(bfcp->sdpm, "userid"));
-
-			uint16_t floor_id = 1;
-			err = bfcp_request(bfcp->conn, paddr, BFCP_VER1, BFCP_HELLO,
-					confid, userid, bfcp_resp_handler, bfcp, 1,
-					BFCP_FLOOR_ID, 0, &floor_id);
+			bfcp_send_hello(bfcp);
 		}
 
 	return err;

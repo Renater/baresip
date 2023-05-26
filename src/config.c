@@ -68,7 +68,18 @@ static struct config core_config = {
 		101
 	},
 
-	/** Video */
+	/** Video main */
+	{
+		"", "",
+		"", "",
+		640, 480,
+		1000000,
+		30,
+		true,
+		VID_FMT_YUV420P,
+	},
+
+	/** Video slides */
 	{
 		"", "",
 		"", "",
@@ -427,6 +438,28 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 
 	conf_get_vidfmt(conf, "videnc_format", &cfg->video.enc_fmt);
 
+	/* Slides */
+	(void)conf_get_csv(conf, "slides_source",
+			   cfg->slides.src_mod,
+			   sizeof(cfg->slides.src_mod),
+			   cfg->slides.src_dev,
+			   sizeof(cfg->slides.src_dev));
+	(void)conf_get_csv(conf, "slides_display",
+			   cfg->slides.disp_mod,
+			   sizeof(cfg->slides.disp_mod),
+			   cfg->slides.disp_dev,
+			   sizeof(cfg->slides.disp_dev));
+	if (0 == conf_get_vidsz(conf, "slides_size", &size)) {
+		cfg->slides.width  = size.w;
+		cfg->slides.height = size.h;
+	}
+	(void)conf_get_u32(conf, "slides_bitrate", &cfg->slides.bitrate);
+	(void)conf_get_float(conf, "slides_fps", &cfg->slides.fps);
+	(void)conf_get_bool(conf, "slides_fullscreen",
+			    &cfg->slides.fullscreen);
+
+	conf_get_vidfmt(conf, "slidenc_format", &cfg->slides.enc_fmt);
+
 	/* AVT - Audio/Video Transport */
 	if (0 == conf_get_u32(conf, "rtp_tos", &v))
 		cfg->avt.rtp_tos = v;
@@ -534,6 +567,16 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 "video_fullscreen\t%s\n"
 			 "videnc_format\t\t%s\n"
 			 "\n"
+			 "# Slides\n"
+			 "slides_source\t\t%s,%s\n"
+			 "#slides_source\t\tavformat,rtmp://127.0.0.1/app/foo\n"
+			 "slides_display\t\t%s,%s\n"
+			 "slides_size\t\t\"%ux%u\"\n"
+			 "slides_bitrate\t\t%u\n"
+			 "slides_fps\t\t%.2f\n"
+			 "slides_fullscreen\t%s\n"
+			 "slidenc_format\t\t%s\n"
+			 "\n"
 			 "# AVT\n"
 			 "rtp_tos\t\t\t%u\n"
 			 "rtp_video_tos\t\t%u\n"
@@ -589,6 +632,13 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 cfg->video.bitrate, cfg->video.fps,
 			 cfg->video.fullscreen ? "yes" : "no",
 			 vidfmt_name(cfg->video.enc_fmt),
+
+			 cfg->slides.src_mod, cfg->slides.src_dev,
+			 cfg->slides.disp_mod, cfg->slides.disp_dev,
+			 cfg->slides.width, cfg->slides.height,
+			 cfg->slides.bitrate, cfg->slides.fps,
+			 cfg->slides.fullscreen ? "yes" : "no",
+			 vidfmt_name(cfg->slides.enc_fmt),
 
 			 cfg->avt.rtp_tos,
 			 cfg->avt.rtpv_tos,
@@ -787,6 +837,22 @@ static int core_config_template(struct re_printf *pf, const struct config *cfg)
 			  cfg->video.width, cfg->video.height,
 			  cfg->video.bitrate, cfg->video.fps,
 			  vidfmt_name(cfg->video.enc_fmt));
+
+	err |= re_hprintf(pf,
+			  "\n# Slides\n"
+			  "#slides_source\t\t%s\n"
+			  "#slides_display\t\t%s\n"
+			  "slides_size\t\t%dx%d\n"
+			  "slides_bitrate\t\t%u\n"
+			  "slides_fps\t\t%.2f\n"
+			  "slides_fullscreen\tno\n"
+			  "slides_format\t\t%s\n"
+			  ,
+			  default_video_device(),
+			  default_video_display(),
+			  cfg->slides.width, cfg->slides.height,
+			  cfg->slides.bitrate, cfg->slides.fps,
+			  vidfmt_name(cfg->slides.enc_fmt));
 
 	err |= re_hprintf(pf,
 			  "\n# AVT - Audio/Video Transport\n"

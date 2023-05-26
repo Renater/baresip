@@ -910,20 +910,19 @@ int call_streams_alloc(struct call *call)
 		if (err)
 			return err;
 
-		err = video_alloc(&call->video_bis, &call->streaml, &strm_prm,
-				  call->cfg, call->sdp,
-				  acc->mnat, call->mnats,
-				  acc->menc, call->mencs,
-				  "slides",
-				  account_vidcodecl(call->acc),
-				  baresip_vidfiltl(), !call->got_offer,
-				  video_error_handler, call);
-		stream_set_ldir(video_strm(call->video_bis), SDP_RECVONLY);
-
-		if (err)
-			return err;
-
 		if (str_isset(call->cfg->bfcp.proto)) {
+			err = video_alloc(&call->video_bis, &call->streaml, &strm_prm,
+					  call->cfg, call->sdp,
+					  acc->mnat, call->mnats,
+					  acc->menc, call->mencs,
+					  "slides",
+					  account_vidcodecl(call->acc),
+					  baresip_vidfiltl(), !call->got_offer,
+					  video_error_handler, call);
+
+			if (err)
+				return err;
+
 			err = bfcp_alloc(&call->bfcp, call->sdp,
 					 &call->cfg->bfcp, !call->got_offer,
 					 acc->mnat, call->mnats);

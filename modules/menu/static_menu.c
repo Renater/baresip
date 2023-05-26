@@ -1299,7 +1299,7 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 {
 	const struct cmd_arg *carg = arg;
 	struct pl pl_driver, pl_device;
-	struct config_video *vidcfg;
+	struct config_video *vidcfg, *slidescfg;
 	struct config *cfg;
 	struct video *v;
 	const struct vidsrc *vs;
@@ -1344,10 +1344,8 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 		return EINVAL;
 	}
 
-	vidcfg = &cfg->video;
-
-	str_ncpy(vidcfg->src_mod, driver, sizeof(vidcfg->src_mod));
-	str_ncpy(vidcfg->src_dev, device, sizeof(vidcfg->src_dev));
+	vidcfg= &cfg->video;
+	slidescfg = &cfg->slides;
 
 	for (leu = list_head(uag_list()); leu; leu = leu->next) {
 		struct ua *ua = leu->data;
@@ -1356,8 +1354,11 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 			struct call *call = le->data;
 
 			v = call_video(call);
-
-			err = video_set_source(v, driver, device);
+			err = video_set_source(v, vidcfg->src_mod,
+					       vidcfg->src_dev);
+			v = call_video_bis(call);
+			err |= video_set_source(v, slidescfg->src_mod,
+						slidescfg->src_dev);
 			if (err) {
 				(void)re_hprintf(pf,
 						 "failed to set video-source"
