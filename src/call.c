@@ -37,7 +37,7 @@ struct call {
 	struct list streaml;      /**< List of mediastreams (struct stream) */
 	struct audio *audio;      /**< Audio stream                         */
 	struct video *video;      /**< Video main stream                    */
-	struct video *video_bis;  /**< Video slides stream                  */
+	struct video *slides;     /**< Video slides stream                  */
 	struct bfcp *bfcp;        /**< BFCP                                 */
 	enum call_state state;    /**< Call state                           */
 	int32_t adelay;           /**< Auto answer delay in ms              */
@@ -215,17 +215,18 @@ static void call_stream_start(struct call *call, bool active)
 			warning("call: could not start video: %m\n", err);
 		}
 	}
-	if (stream_is_ready(video_strm(call->video_bis))) {
-		err = video_update(call->video_bis, call->peer_uri);
-		if (err) {
-			warning("call: could not start video bis: %m\n", err);
-		}
-	}
 
 	if (call->bfcp) {
 		err = bfcp_start(call->bfcp);
 		if (err) {
 			warning("call: could not start BFCP: %m\n", err);
+		}
+		if (stream_is_ready(video_strm(call->slides))) {
+			err = video_update(call->slides, call->peer_uri);
+			if (err) {
+				warning("call: could not start slides: %m\n",
+					err);
+			}
 		}
 	}
 
@@ -257,7 +258,7 @@ static void call_stream_stop(struct call *call)
 
 	/* Video */
 	video_stop(call->video);
-	video_stop(call->video_bis);
+	video_stop(call->slides);
 
 	tmr_cancel(&call->tmr_inv);
 }
@@ -385,8 +386,8 @@ static int update_media(struct call *call)
 	if (call->video)
 		video_sdp_attr_decode(call->video);
 
-	if (call->video_bis)
-		video_sdp_attr_decode(call->video_bis);
+	if (call->slides)
+		video_sdp_attr_decode(call->slides);
 
 	/* Update each stream */
 	FOREACH_STREAM {
@@ -411,10 +412,10 @@ static int update_media(struct call *call)
 	else
 		video_stop(call->video);
 
-	if (stream_is_ready(video_strm(call->video_bis)))
-		err |= video_update(call->video_bis, call->peer_uri);
+	if (stream_is_ready(video_strm(call->slides)))
+		err |= video_update(call->slides, call->peer_uri);
 	else
-		video_stop(call->video_bis);
+		video_stop(call->slides);
 
 	return err;
 }
@@ -455,7 +456,7 @@ static void call_destructor(void *arg)
 	mem_deref(call->diverter_uri);
 	mem_deref(call->audio);
 	mem_deref(call->video);
-	mem_deref(call->video_bis);
+	mem_deref(call->slides);
 	mem_deref(call->bfcp);
 	mem_deref(call->sdp);
 	mem_deref(call->mnats);
@@ -548,9 +549,9 @@ static void menc_event_handler(enum menc_event event,
 				warning("call: secure: could not"
 					" start video: %m\n", err);
 			}
-			stream_set_secure(video_strm(call->video_bis), true);
-			stream_start_rtcp(video_strm(call->video_bis));
-			err = video_update(call->video_bis, call->peer_uri);
+			stream_set_secure(video_strm(call->slides), true);
+			stream_start_rtcp(video_strm(call->slides));
+			err = video_update(call->slides, call->peer_uri);
 			if (err) {
 				warning("call: secure: could not"
 					" start video: %m\n", err);
@@ -616,7 +617,8 @@ static void stream_mnatconn_handler(struct stream *strm, void *arg)
 		case MEDIA_VIDEO:
 			err = video_update(call->video, call->peer_uri);
 			if (err) {
-				err = video_update(call->video_bis, call->peer_uri);
+				err = video_update(call->slides,
+						   call->peer_uri);
 			}
 			if (err) {
 				warning("call: mnatconn: could not"
@@ -637,9 +639,10 @@ static void stream_rtpestab_handler(struct stream *strm, void *arg)
 	content = sdp_media_rattr(stream_sdpmedia(strm), "content");
 
 	if(0==str_cmp(content, "slides")){
-		stream_enable_rtp_timeout(video_strm(call->video_bis), 1000);
-		video_start_display(call->video_bis, call->peer_uri);
-		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL, "VIDEO_SLIDES_START");
+		stream_enable_rtp_timeout(video_strm(call->slides), 1000);
+		video_start_display(call->slides, call->peer_uri);
+		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
+			 "VIDEO_SLIDES_START");
 		return;
 	}
 
@@ -697,7 +700,7 @@ static void stream_error_handler(struct stream *strm, int err, void *arg)
 	content = sdp_media_rattr(stream_sdpmedia(strm), "content");
 
 	if(0==str_cmp(content, "slides")){
-		video_stop_display(call->video_bis);
+		video_stop_display(call->slides);
 		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL, "VIDEO_SLIDES_STOP");
 		return;
 	}
@@ -906,13 +909,15 @@ int call_streams_alloc(struct call *call)
 			return err;
 
 		if (str_isset(call->cfg->bfcp.proto)) {
-			err = video_alloc(&call->video_bis, &call->streaml, &strm_prm,
+			err = video_alloc(&call->slides, &call->streaml,
+					  &strm_prm,
 					  call->cfg, call->sdp,
 					  acc->mnat, call->mnats,
 					  acc->menc, call->mencs,
 					  "slides",
 					  account_vidcodecl(call->acc),
-					  baresip_vidfiltl(), !call->got_offer,
+					  baresip_vidfiltl(),
+					  !call->got_offer,
 					  video_error_handler, call);
 
 			if (err)
@@ -1457,11 +1462,10 @@ int call_answer(struct call *call, uint16_t scode, enum vidmode vmode)
 		return 0;
 	}
 
-	if (vmode == VIDMODE_OFF)
+	if (vmode == VIDMODE_OFF){
 		call->video = mem_deref(call->video);
-
-	if (vmode == VIDMODE_OFF)
-		call->video_bis = mem_deref(call->video);
+		call->slides = mem_deref(call->slides);
+	}
 
 	info("call: answering call on line %u from %s with %u\n",
 			call->linenum, call->peer_uri, scode);
@@ -1535,7 +1539,7 @@ bool call_has_video(const struct call *call)
 		return false;
 
 	return sdp_media_has_media(stream_sdpmedia(video_strm(call->video))) ||
-	       sdp_media_has_media(stream_sdpmedia(video_strm(call->video_bis))) ;
+	       sdp_media_has_media(stream_sdpmedia(video_strm(call->slides))) ;
 }
 
 
@@ -1776,8 +1780,8 @@ int call_status(struct re_printf *pf, const struct call *call)
 	if (call->video)
 		err |= video_print(pf, call->video);
 
-	if (call->video_bis)
-		err |= video_print(pf, call->video_bis);
+	if (call->slides)
+		err |= video_print(pf, call->slides);
 
 	/* remove old junk */
 	err |= re_hprintf(pf, "    ");
@@ -2302,7 +2306,7 @@ static bool have_common_video_codecs(const struct call *call)
 
 	sc = sdp_media_rcodec(stream_sdpmedia(video_strm(call->video)));
 	if (!sc)
-		sc = sdp_media_rcodec(stream_sdpmedia(video_strm(call->video_bis)));
+		sc = sdp_media_rcodec(stream_sdpmedia(video_strm(call->slides)));
 	if (!sc)
 		return false;
 
@@ -2368,7 +2372,7 @@ int call_accept(struct call *call, struct sipsess_sock *sess_sock,
 		 */
 		if (!valid_addressfamily(call, audio_strm(call->audio)) ||
 		    !valid_addressfamily(call, video_strm(call->video)) ||
-		    !valid_addressfamily(call, video_strm(call->video_bis))){
+		    !valid_addressfamily(call, video_strm(call->slides))){
 			sip_treply(NULL, uag_sip(), msg, 488,
 				   "Not Acceptable Here");
 
@@ -2773,9 +2777,9 @@ struct video *call_video(const struct call *call)
  *
  * @return Video object
  */
-struct video *call_video_bis(const struct call *call)
+struct video *call_slides(const struct call *call)
 {
-	return call ? call->video_bis : NULL;
+	return call ? call->slides : NULL;
 }
 
 

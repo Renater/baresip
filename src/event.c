@@ -233,7 +233,7 @@ int event_encode_dict(struct odict *od, struct ua *ua, enum ua_event ev,
 			if (NULL != strcasestr(prm, "main"))
 				strm = video_strm(call_video(call));
 			if (NULL != strcasestr(prm, "slides"))
-				strm = video_strm(call_video_bis(call));
+				strm = video_strm(call_slides(call));
 		}
 		err = add_rtcp_stats(od, stream_rtcp_stats(strm));
 		if (err)

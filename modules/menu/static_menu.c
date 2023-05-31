@@ -1356,7 +1356,7 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 			v = call_video(call);
 			err = video_set_source(v, vidcfg->src_mod,
 					       vidcfg->src_dev);
-			v = call_video_bis(call);
+			v = call_slides(call);
 			err |= video_set_source(v, slidescfg->src_mod,
 						slidescfg->src_dev);
 			if (err) {
