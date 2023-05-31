@@ -632,11 +632,9 @@ static void stream_rtpestab_handler(struct stream *strm, void *arg)
 {
 	struct call *call = arg;
 	char* content= NULL;
-	struct sdp_media *m ;
 	MAGIC_CHECK(call);
 
-	m = stream_sdpmedia(strm);
-	content = sdp_media_rattr_apply(m, "content" , NULL, NULL);
+	content = sdp_media_rattr(stream_sdpmedia(strm), "content");
 
 	if(0==str_cmp(content, "slides")){
 		stream_enable_rtp_timeout(video_strm(call->video_bis), 1000);
@@ -668,8 +666,7 @@ static void stream_rtcp_handler(struct stream *strm,
 		int err;
 		char *content = NULL;
 
-		m = stream_sdpmedia(strm);
-		content = sdp_media_rattr_apply(m, "content" , NULL, NULL);
+		content = sdp_media_rattr(stream_sdpmedia(strm), "content");
 
 		if( str_cmp(sdp_media_name(stream_sdpmedia(strm)),
 					   "video") == 0) {
@@ -695,11 +692,9 @@ static void stream_error_handler(struct stream *strm, int err, void *arg)
 {
 	struct call *call = arg;
 	char* content= NULL;
-	struct sdp_media *m ;
 	MAGIC_CHECK(call);
 
-	m = stream_sdpmedia(strm);
-	content = sdp_media_rattr_apply(m, "content" , NULL, NULL);
+	content = sdp_media_rattr(stream_sdpmedia(strm), "content");
 
 	if(0==str_cmp(content, "slides")){
 		video_stop_display(call->video_bis);
@@ -1858,22 +1853,29 @@ int call_send_digit(struct call *call, char key)
  *
  * @return 0 if success, otherwise errorcode
  */
-int call_send_pfu(struct call *call)
+int call_send_pfu(struct call *call, const char* content, const char* label)
 {
+	char media_strm[128] = "";
 	int err = 0;
 
 	if (!call)
 		return EINVAL;
+
+	if(0==str_cmp(content, "slides")){
+		re_snprintf(media_strm, sizeof(media_strm),
+			    "<media_stream>%s</media_stream>", label);
+	}
 
 	err = send_info(call->sess,
 			"application/media_control+xml",
 			"<?xml version=\"1.0\" encoding=\"utf-8\" ?>"
 			"<media_control><vc_primitive><to_encoder>"
 			"<picture_fast_update>"
+			"%s"
 			"</picture_fast_update>"
 			"</to_encoder></vc_primitive></media_control>",
 			send_pfu_info_handler,
-			NULL, NULL);
+			NULL, media_strm);
 	if (err) {
 		warning("call: picture_fast_update request failed (%m)\n", err);
 	}

@@ -611,7 +611,8 @@ static void send_fir(struct stream *s, bool pli)
 {
 	struct call *cur_call;
 	struct ua *local_ua ;
-	char *local_uri;
+	char *local_uri, *label;
+	char* content= NULL;
 	bool sip_media_control=false;
 	struct config *cur_conf;
 	int err;
@@ -638,17 +639,26 @@ static void send_fir(struct stream *s, bool pli)
 			if (local_ua)
 				cur_call = ua_call(local_ua);
 
-			if (cur_call)
-				err = call_send_pfu(cur_call);
+			if (cur_call){
+				content = sdp_media_rattr(stream_sdpmedia(s),
+							  "content");
+				label = sdp_media_rattr(stream_sdpmedia(s),
+							"label");
+				err = call_send_pfu(cur_call, content,
+						    label);
+			}
 
 			if (err)
-				warning("video: failed to send picture_fast_update %m\n", err);
+				warning("video: failed to send "
+					"picture_fast_update %m\n", err);
 		}
 		else {
-			err = rtcp_send_fir(stream_rtp_sock(s),
-					    rtp_sess_ssrc(stream_rtp_sock(s)));
+			err = rtcp_send_fir(
+				stream_rtp_sock(s),
+				rtp_sess_ssrc(stream_rtp_sock(s)));
 			if (err)
-				warning("video: failed to send FIR %m\n", err);
+				warning("video: failed to send FIR %m\n",
+					err);
 		}
 	}
 }
