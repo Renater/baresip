@@ -205,8 +205,8 @@ static void stream_close(struct stream *strm, int err)
 {
 	stream_error_h *errorh = strm->errorh;
 
-	//strm->terminated = true;
-	//strm->errorh = NULL;
+	strm->terminated = true;
+	strm->errorh = NULL;
 	strm->rx.rtp_estab = false;
 	jbuf_flush(strm->rx.jbuf);
 
@@ -253,7 +253,6 @@ static void check_rtp_handler(void *arg)
 			     sdp_media_name(strm->sdp), diff_ms);
 
 			stream_close(strm, ETIMEDOUT);
-			tmr_cancel(&strm->rx.tmr_rtp);
 		}
 	}
 	else {
@@ -1158,8 +1157,8 @@ void stream_enable_rtp_timeout(struct stream *strm, uint32_t timeout_ms)
 	if (!strm)
 		return;
 
-	//if (!sdp_media_has_media(stream_sdpmedia(strm)))
-	//	return;
+	if (!sdp_media_has_media(stream_sdpmedia(strm)))
+		return;
 
 	strm->rx.rtp_timeout = timeout_ms;
 
@@ -1589,6 +1588,17 @@ const struct sa *stream_raddr(const struct stream *strm)
 		return NULL;
 
 	return &strm->tx.raddr_rtp;
+}
+
+
+uint64_t stream_rx_ts_last(const struct stream *strm)
+{
+	if (!strm)
+		return 0;
+	if (!strm->rx.ts_last)
+		return 0;
+
+	return strm->rx.ts_last;
 }
 
 

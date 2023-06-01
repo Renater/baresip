@@ -299,6 +299,8 @@ struct rtp_sock *stream_rtp_sock(const struct stream *strm);
 const struct sa *stream_raddr(const struct stream *strm);
 const char *stream_mid(const struct stream *strm);
 uint8_t stream_generate_extmap_id(struct stream *strm);
+uint64_t stream_rx_ts_last(const struct stream *strm);
+
 
 /* Send */
 void stream_update_encoder(struct stream *s, int pt_enc);

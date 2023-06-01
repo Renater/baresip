@@ -54,6 +54,7 @@ struct call {
 	struct tmr tmr_dtmf;      /**< Timer for incoming DTMF events       */
 	struct tmr tmr_answ;      /**< Timer for delayed answer             */
 	struct tmr tmr_reinv;     /**< Timer for outgoing re-INVITES        */
+	struct tmr tmr_slides;    /**< Timer for received slides stream     */
 	time_t time_start;        /**< Time when call started               */
 	time_t time_conn;         /**< Time when call initiated             */
 	time_t time_stop;         /**< Time when call stopped               */
@@ -261,6 +262,7 @@ static void call_stream_stop(struct call *call)
 	video_stop(call->slides);
 
 	tmr_cancel(&call->tmr_inv);
+	tmr_cancel(&call->tmr_slides);
 }
 
 
@@ -630,6 +632,27 @@ static void stream_mnatconn_handler(struct stream *strm, void *arg)
 }
 
 
+static void check_slides_stream(struct call *call)
+{
+	uint64_t rx_ts_last;
+	const uint64_t now = tmr_jiffies();
+	int diff_ms;
+
+	tmr_start(&call->tmr_slides, 1000, check_slides_stream, call);
+
+	rx_ts_last = stream_rx_ts_last(video_strm(call->slides));
+	if(rx_ts_last){
+		diff_ms = (int)(now - rx_ts_last);
+		if (diff_ms > 1000){
+			video_stop_display(call->slides);
+			ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
+				 "VIDEO_SLIDES_STOP");
+			video_start_display(call->slides, call->peer_uri);
+		}
+	}
+}
+
+
 static void stream_rtpestab_handler(struct stream *strm, void *arg)
 {
 	struct call *call = arg;
@@ -639,8 +662,7 @@ static void stream_rtpestab_handler(struct stream *strm, void *arg)
 	content = sdp_media_rattr(stream_sdpmedia(strm), "content");
 
 	if(0==str_cmp(content, "slides")){
-		stream_enable_rtp_timeout(video_strm(call->slides), 1000);
-		video_start_display(call->slides, call->peer_uri);
+		tmr_start(&call->tmr_slides, 1000, check_slides_stream, call);
 		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
 			 "VIDEO_SLIDES_START");
 		return;
@@ -694,16 +716,7 @@ static void stream_rtcp_handler(struct stream *strm,
 static void stream_error_handler(struct stream *strm, int err, void *arg)
 {
 	struct call *call = arg;
-	char* content= NULL;
 	MAGIC_CHECK(call);
-
-	content = sdp_media_rattr(stream_sdpmedia(strm), "content");
-
-	if(0==str_cmp(content, "slides")){
-		video_stop_display(call->slides);
-		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL, "VIDEO_SLIDES_STOP");
-		return;
-	}
 
 	info("call: error in \"%s\" rtp stream (%m)\n",
 		sdp_media_name(stream_sdpmedia(strm)), err);
@@ -919,6 +932,7 @@ int call_streams_alloc(struct call *call)
 					  baresip_vidfiltl(),
 					  !call->got_offer,
 					  video_error_handler, call);
+			stream_enable_rtp_timeout(video_strm(call->slides), 0);
 
 			if (err)
 				return err;
@@ -1037,6 +1051,7 @@ int call_alloc(struct call **callp, const struct config *cfg, struct list *lst,
 	tmr_init(&call->tmr_inv);
 	tmr_init(&call->tmr_answ);
 	tmr_init(&call->tmr_reinv);
+	tmr_init(&call->tmr_slides);
 
 	call->cfg    = cfg;
 	call->acc    = mem_ref(acc);
