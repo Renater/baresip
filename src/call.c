@@ -63,7 +63,7 @@ struct call {
 	bool got_offer;           /**< Got SDP Offer from Peer              */
 	bool on_hold;             /**< True if call is on hold (local)      */
 	bool early_confirmed;     /**< Early media confirmed by PRACK       */
-	bool pfu_waiting;         /**< Waiting for PFU feedback             */
+	bool pfu_disabled;        /**< PFU requests disabled                */
 	struct mnat_sess *mnats;  /**< Media NAT session                    */
 	bool mnat_wait;           /**< Waiting for MNAT to establish        */
 	struct menc_sess *mencs;  /**< Media encryption session state       */
@@ -1064,7 +1064,7 @@ int call_alloc(struct call **callp, const struct config *cfg, struct list *lst,
 	call->estadir = SDP_SENDRECV;
 	call->estvdir = SDP_SENDRECV;
 	call->use_rtp = prm->use_rtp;
-	call->pfu_waiting = false;
+	call->pfu_disabled = false;
 	call_decode_sip_autoanswer(call, msg);
 	call_decode_diverter(call, msg);
 
@@ -1882,7 +1882,7 @@ int call_send_pfu(struct call *call, const char* content, const char* label)
 	if (!call)
 		return EINVAL;
 
-	if (call->pfu_waiting)
+	if (call->pfu_disabled)
 		return 1;
 
 	if(0==str_cmp(content, "slides")){
@@ -1904,7 +1904,7 @@ int call_send_pfu(struct call *call, const char* content, const char* label)
 		warning("call: picture_fast_update request failed (%m)\n", err);
 	}
 
-	call->pfu_waiting = true;
+	call->pfu_disabled = true;
 
 	return err;
 }
@@ -2129,8 +2129,9 @@ static void send_pfu_info_handler(int err,
 		warning("call: sending PICTURE_FAST_UPDATE INFO failed (scode: %d)",
 				msg->scode);
 	}
-	else
-		call->pfu_waiting = false;
+
+	if (msg->scode == 200 || msg->scode == 408)
+		call->pfu_disabled = false;
 }
 
 
