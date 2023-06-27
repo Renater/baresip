@@ -63,6 +63,7 @@ struct call {
 	bool got_offer;           /**< Got SDP Offer from Peer              */
 	bool on_hold;             /**< True if call is on hold (local)      */
 	bool early_confirmed;     /**< Early media confirmed by PRACK       */
+	bool pfu_waiting;         /**< Waiting for PFU feedback             */
 	struct mnat_sess *mnats;  /**< Media NAT session                    */
 	bool mnat_wait;           /**< Waiting for MNAT to establish        */
 	struct menc_sess *mencs;  /**< Media encryption session state       */
@@ -1063,6 +1064,7 @@ int call_alloc(struct call **callp, const struct config *cfg, struct list *lst,
 	call->estadir = SDP_SENDRECV;
 	call->estvdir = SDP_SENDRECV;
 	call->use_rtp = prm->use_rtp;
+	call->pfu_waiting = false;
 	call_decode_sip_autoanswer(call, msg);
 	call_decode_diverter(call, msg);
 
@@ -1880,6 +1882,9 @@ int call_send_pfu(struct call *call, const char* content, const char* label)
 	if (!call)
 		return EINVAL;
 
+	if (call->pfu_waiting)
+		return 1;
+
 	if(0==str_cmp(content, "slides")){
 		re_snprintf(media_strm, sizeof(media_strm),
 			    "<media_stream>%s</media_stream>", label);
@@ -1894,10 +1899,13 @@ int call_send_pfu(struct call *call, const char* content, const char* label)
 			"</picture_fast_update>"
 			"</to_encoder></vc_primitive></media_control>",
 			send_pfu_info_handler,
-			NULL, media_strm);
+			call, media_strm);
 	if (err) {
 		warning("call: picture_fast_update request failed (%m)\n", err);
 	}
+
+	call->pfu_waiting = true;
+
 	return err;
 }
 
@@ -2112,7 +2120,7 @@ static void send_pfu_info_handler(int err,
 				  const struct sip_msg *msg,
 				  void *arg)
 {
-	(void)arg;
+	struct call *call = arg;
 	struct config *cur_conf;
 
 	if (err)
@@ -2120,11 +2128,9 @@ static void send_pfu_info_handler(int err,
 	else if (msg && msg->scode != 200) {
 		warning("call: sending PICTURE_FAST_UPDATE INFO failed (scode: %d)",
 				msg->scode);
-
-		cur_conf = conf_config();
-		if (cur_conf)
-			cur_conf->sip.media_control = false;
 	}
+	else
+		call->pfu_waiting = false;
 }
 
 

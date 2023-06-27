@@ -648,18 +648,20 @@ static void send_fir(struct stream *s, bool pli)
 						    label);
 			}
 
-			if (err)
-				warning("video: failed to send "
-					"picture_fast_update %m\n", err);
+			if (err){
+				info("video: failed to send "
+				     "picture_fast_update\n");
+			}
+			else
+				return;
 		}
-		else {
-			err = rtcp_send_fir(
-				stream_rtp_sock(s),
-				rtp_sess_ssrc(stream_rtp_sock(s)));
-			if (err)
-				warning("video: failed to send FIR %m\n",
-					err);
-		}
+		/* Try to send RTCP FIR at last*/
+		err = rtcp_send_fir(
+			stream_rtp_sock(s),
+			rtp_sess_ssrc(stream_rtp_sock(s)));
+		if (err)
+			warning("video: failed to send FIR %m\n",
+				err);
 	}
 }
 
