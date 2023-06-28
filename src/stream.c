@@ -480,7 +480,7 @@ static void rtcp_handler(const struct sa *src, struct rtcp_msg *msg, void *arg)
 
 	MAGIC_CHECK(s);
 
-	s->rx.ts_last = tmr_jiffies();
+	//s->rx.ts_last = tmr_jiffies();
 
 	switch (msg->hdr.pt) {
 

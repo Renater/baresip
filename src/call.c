@@ -64,6 +64,7 @@ struct call {
 	bool on_hold;             /**< True if call is on hold (local)      */
 	bool early_confirmed;     /**< Early media confirmed by PRACK       */
 	bool pfu_disabled;        /**< PFU requests disabled                */
+	bool slides_displayed;    /**< Ture if slides are being displayed   */
 	struct mnat_sess *mnats;  /**< Media NAT session                    */
 	bool mnat_wait;           /**< Waiting for MNAT to establish        */
 	struct menc_sess *mencs;  /**< Media encryption session state       */
@@ -644,11 +645,17 @@ static void check_slides_stream(struct call *call)
 	rx_ts_last = stream_rx_ts_last(video_strm(call->slides));
 	if(rx_ts_last){
 		diff_ms = (int)(now - rx_ts_last);
-		if (diff_ms > 1000){
+		if (diff_ms > 1000 && call->slides_displayed){
 			video_stop_display(call->slides);
+			call->slides_displayed = false;
 			ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
 				 "VIDEO_SLIDES_STOP");
 			video_start_display(call->slides, call->peer_uri);
+		}
+		if (diff_ms < 1000 && !call->slides_displayed){
+			call->slides_displayed = true;
+			ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
+				 "VIDEO_SLIDES_START");
 		}
 	}
 }
@@ -664,8 +671,6 @@ static void stream_rtpestab_handler(struct stream *strm, void *arg)
 
 	if(0==str_cmp(content, "slides")){
 		tmr_start(&call->tmr_slides, 1000, check_slides_stream, call);
-		ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
-			 "VIDEO_SLIDES_START");
 		return;
 	}
 
@@ -1065,6 +1070,7 @@ int call_alloc(struct call **callp, const struct config *cfg, struct list *lst,
 	call->estvdir = SDP_SENDRECV;
 	call->use_rtp = prm->use_rtp;
 	call->pfu_disabled = false;
+	call->slides_displayed = false;
 	call_decode_sip_autoanswer(call, msg);
 	call_decode_diverter(call, msg);
 
