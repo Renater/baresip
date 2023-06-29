@@ -938,7 +938,6 @@ int call_streams_alloc(struct call *call)
 					  baresip_vidfiltl(),
 					  !call->got_offer,
 					  video_error_handler, call);
-			stream_enable_rtp_timeout(video_strm(call->slides), 0);
 
 			if (err)
 				return err;
@@ -2052,6 +2051,7 @@ static void set_established_mdir(void *arg)
 static void sipsess_estab_handler(const struct sip_msg *msg, void *arg)
 {
 	struct call *call = arg;
+	char * content = NULL;
 	(void)msg;
 
 	MAGIC_CHECK(call);
@@ -2069,7 +2069,9 @@ static void sipsess_estab_handler(const struct sip_msg *msg, void *arg)
 
 		FOREACH_STREAM {
 			struct stream *strm = le->data;
-			stream_enable_rtp_timeout(strm, call->rtp_timeout_ms);
+			content = sdp_media_rattr(stream_sdpmedia(strm), "content");
+			if(0!=str_cmp(content, "slides"))
+				stream_enable_rtp_timeout(strm, call->rtp_timeout_ms);
 		}
 	}
 
