@@ -199,6 +199,8 @@ static void turn_handler(int err, uint16_t scode, const char *reason,
 	struct comp *comp = arg;
 	uint64_t token;
 	struct mnat_media *m = comp->m;
+	char public_address[16] = "";
+	struct sa pub_addr;
 	(void)mapped_addr;
 	(void)msg;
 
@@ -210,16 +212,20 @@ static void turn_handler(int err, uint16_t scode, const char *reason,
 		if (token_attr)
 		    token = token_attr->v.uint64;
 
+		str_ncpy(public_address, relay_addr, sizeof(relay_addr));
+		conf_get_str(conf_cur(), "public_address", public_address, sizeof(public_address));
+		err = sa_set_str(&pub_addr, public_address,  sa_port(relay_addr));
+
 		if (comp->ix == 0) {
-		    sdp_media_set_laddr(m->sdpm, relay_addr);
-		    err = turnc_alloc(&other->turnc, NULL,
-		          IPPROTO_UDP, other->sock, LAYER,
-		          &m->sess->srv, m->sess->user, m->sess->pass,
-		          TURN_DEFAULT_LIFETIME, &token,
-		          turn_handler, other);
+		    sdp_media_set_laddr(m->sdpm, &pub_addr);
+		    err |= turnc_alloc(&other->turnc, NULL,
+		           IPPROTO_UDP, other->sock, LAYER,
+		           &m->sess->srv, m->sess->user, m->sess->pass,
+		           TURN_DEFAULT_LIFETIME, &token,
+		           turn_handler, other);
 		}
 		else
-			sdp_media_set_laddr_rtcp(m->sdpm, relay_addr);
+			sdp_media_set_laddr_rtcp(m->sdpm, &pub_addr);
 
 		comp->addr = *relay_addr;
 
