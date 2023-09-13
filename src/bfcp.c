@@ -184,9 +184,13 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 		break;
 
 	case BFCP_FLOOR_RELEASE:
-		break;
-
 	case BFCP_HELLO_ACK:
+	case BFCP_FLOOR_REQUEST_STATUS:
+	case BFCP_FLOOR_REQ_STATUS_ACK:
+	case BFCP_FLOOR_STATUS:
+	case BFCP_FLOOR_STATUS_ACK:
+	case BFCP_GOODBYE:
+	case BFCP_GOODBYE_ACK:
 		break;
 
 	default:
