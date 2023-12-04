@@ -122,19 +122,11 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 				    BFCP_FLOOR_RELEASE,
 				    BFCP_FLOOR_REQUEST_QUERY,
 				    BFCP_FLOOR_REQUEST_STATUS,
-				    BFCP_USER_QUERY,
-				    BFCP_USER_STATUS,
-				    BFCP_FLOOR_QUERY,
-				    BFCP_FLOOR_STATUS,
-				    BFCP_CHAIR_ACTION,
-				    BFCP_CHAIR_ACTION_ACK,
 				    BFCP_HELLO,
 				    BFCP_HELLO_ACK,
-				    BFCP_ERROR,
-				    BFCP_FLOOR_REQ_STATUS_ACK,
-				    BFCP_FLOOR_STATUS_ACK,
 				    BFCP_GOODBYE,
-				    BFCP_GOODBYE_ACK };
+				    BFCP_GOODBYE_ACK,
+				    BFCP_ERROR };
 
 	enum bfcp_attrib  attrib[] = {  BFCP_BENEFICIARY_ID,
 					BFCP_FLOOR_ID,
@@ -185,10 +177,6 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 
 	case BFCP_FLOOR_RELEASE:
 	case BFCP_HELLO_ACK:
-	case BFCP_FLOOR_REQUEST_STATUS:
-	case BFCP_FLOOR_REQ_STATUS_ACK:
-	case BFCP_FLOOR_STATUS:
-	case BFCP_FLOOR_STATUS_ACK:
 	case BFCP_GOODBYE:
 	case BFCP_GOODBYE_ACK:
 		break;
