@@ -56,7 +56,7 @@ static const char aes_cm_128_hmac_sha1_80[] = "AES_CM_128_HMAC_SHA1_80";
 static const char aes_128_gcm[]             = "AEAD_AES_128_GCM";
 static const char aes_256_gcm[]             = "AEAD_AES_256_GCM";
 
-static const char *preferred_suite = aes_cm_128_hmac_sha1_80;
+static const char *default_suite = aes_cm_128_hmac_sha1_80;
 
 
 static void destructor(void *arg)
@@ -377,6 +377,7 @@ static int media_alloc(struct menc_media **stp, struct menc_sess *sess,
 	int layer = 10; /* above zero */
 	int err = 0;
 	bool mux = (rtpsock == rtcpsock);
+	char preferred_suite[64] = "";
 	(void)sess;
 	(void)rtp;
 	(void)raddr_rtp;
@@ -422,6 +423,9 @@ static int media_alloc(struct menc_media **stp, struct menc_sess *sess,
 			goto out;
 
 		/* set our preferred crypto-suite */
+		str_ncpy(preferred_suite, default_suite, sizeof(default_suite));
+		conf_get_str(conf_cur(), "preferred_crypto_suite",
+			     preferred_suite, sizeof(preferred_suite));
 		err |= str_dup(&st->crypto_suite, preferred_suite);
 		if (err)
 			goto out;

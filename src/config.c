@@ -1167,6 +1167,10 @@ int config_write_template(const char *file, const struct config *cfg)
 	(void)re_fprintf(f, "# Module parameters\n");
 	(void)re_fprintf(f, "\n");
 
+	(void)re_fprintf(f, "# SRTP parameters\n");
+	(void)re_fprintf(f, "#preferred_crypto_suite\tAES_CM_128_HMAC_SHA1_80\n");
+	(void)re_fprintf(f, "\n");
+
 	(void)re_fprintf(f, "# DTLS SRTP parameters\n");
 	(void)re_fprintf(f, "#dtls_srtp_use_ec\tprime256v1\n");
 	(void)re_fprintf(f, "\n");
