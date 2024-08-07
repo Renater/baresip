@@ -36,7 +36,9 @@ struct call {
 	struct call *xcall;       /**< Cross ref Transfer call              */
 	struct list streaml;      /**< List of mediastreams (struct stream) */
 	struct audio *audio;      /**< Audio stream                         */
-	struct video *video;      /**< Video stream                         */
+	struct video *video;      /**< Video main stream                    */
+	struct video *slides;     /**< Video slides stream                  */
+	struct bfcp *bfcp;        /**< BFCP                                 */
 	enum call_state state;    /**< Call state                           */
 	int32_t adelay;           /**< Auto answer delay in ms              */
 	char *aluri;              /**< Alert-Info URI                       */
@@ -53,6 +55,7 @@ struct call {
 	struct tmr tmr_dtmf;      /**< Timer for incoming DTMF events       */
 	struct tmr tmr_answ;      /**< Timer for delayed answer             */
 	struct tmr tmr_reinv;     /**< Timer for outgoing re-INVITES        */
+	struct tmr tmr_slides;    /**< Timer for received slides stream     */
 	time_t time_start;        /**< Time when call started               */
 	time_t time_conn;         /**< Time when call initiated             */
 	time_t time_stop;         /**< Time when call stopped               */
@@ -61,6 +64,9 @@ struct call {
 	bool got_offer;           /**< Got SDP Offer from Peer              */
 	bool on_hold;             /**< True if call is on hold (local)      */
 	bool ans_queued;          /**< True if an (auto) answer is queued   */
+	bool early_confirmed;     /**< Early media confirmed by PRACK       */
+	bool pfu_disabled;        /**< PFU requests disabled                */
+	bool slides_displayed;    /**< True if slides are being displayed   */
 	struct mnat_sess *mnats;  /**< Media NAT session                    */
 	bool mnat_wait;           /**< Waiting for MNAT to establish        */
 	struct menc_sess *mencs;  /**< Media encryption session state       */
@@ -85,9 +91,22 @@ struct call {
 	bool evstop;               /**< UA events stopped flag              */
 };
 
+/** SIP info requests */
+enum sip_info_req {
+	DTMF = 0,
+	PICTURE_FAST_UPDATE,
+};
+
 
 static int send_invite(struct call *call);
+static int send_info(struct sipsess *sess,
+		     const char* content_type, const char* content,
+		     sip_resp_h *resph,
+		     void *arg, const char *fmt, ...);
 static int send_dtmf_info(struct call *call, char key);
+static void send_pfu_info_handler(int err,
+				  const struct sip_msg *msg,
+				  void *arg);
 
 
 static const char *state_name(enum call_state st)
@@ -161,8 +180,10 @@ static void call_stream_stop(struct call *call)
 
 	/* Video */
 	video_stop(call->video);
+	video_stop(call->slides);
 
 	tmr_cancel(&call->tmr_inv);
+	tmr_cancel(&call->tmr_slides);
 }
 
 
@@ -258,6 +279,9 @@ static int call_apply_sdp(struct call *call)
 	if (call->video)
 		video_sdp_attr_decode(call->video);
 
+	if (call->slides)
+		video_sdp_attr_decode(call->slides);
+
 	/* Update each stream */
 	FOREACH_STREAM {
 		struct stream *strm = le->data;
@@ -293,6 +317,11 @@ static int update_streams(struct call *call)
 		err |= video_update(call->video, call->peer_uri);
 	else
 		video_stop(call->video);
+
+	if (stream_is_ready(video_strm(call->slides)))
+		err |= video_update(call->slides, call->peer_uri);
+	else
+		video_stop(call->slides);
 
 	return err;
 }
@@ -355,6 +384,8 @@ static void call_destructor(void *arg)
 	mem_deref(call->diverter_uri);
 	mem_deref(call->audio);
 	mem_deref(call->video);
+	mem_deref(call->slides);
+	mem_deref(call->bfcp);
 	mem_deref(call->sdp);
 	mem_deref(call->mnats);
 	mem_deref(call->mencs);
@@ -450,6 +481,13 @@ static void menc_event_handler(enum menc_event event,
 				warning("call: secure: could not"
 					" start video: %m\n", err);
 			}
+			stream_set_secure(video_strm(call->slides), true);
+			stream_start_rtcp(video_strm(call->slides));
+			err = video_update(call->slides, call->peer_uri);
+			if (err) {
+				warning("call: secure: could not"
+					" start video: %m\n", err);
+			}
 		}
 		else {
 			info("call: mediaenc: no match for stream (%s)\n",
@@ -511,6 +549,10 @@ static void stream_mnatconn_handler(struct stream *strm, void *arg)
 		case MEDIA_VIDEO:
 			err = video_update(call->video, call->peer_uri);
 			if (err) {
+				err = video_update(call->slides,
+						   call->peer_uri);
+			}
+			if (err) {
 				warning("call: mnatconn: could not"
 					" start video: %m\n", err);
 			}
@@ -520,10 +562,45 @@ static void stream_mnatconn_handler(struct stream *strm, void *arg)
 }
 
 
+static void check_slides_stream(struct call *call)
+{
+	uint64_t rx_ts_last;
+	const uint64_t now = tmr_jiffies();
+	int diff_ms;
+
+	tmr_start(&call->tmr_slides, 1000, check_slides_stream, call);
+
+	rx_ts_last = stream_rx_ts_last(video_strm(call->slides));
+	if(rx_ts_last){
+		diff_ms = (int)(now - rx_ts_last);
+		if (diff_ms > 1000 && call->slides_displayed){
+			video_stop_display(call->slides);
+			call->slides_displayed = false;
+			ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
+				 "VIDEO_SLIDES_STOP");
+			video_start_display(call->slides, call->peer_uri);
+		}
+		if (diff_ms < 1000 && !call->slides_displayed){
+			call->slides_displayed = true;
+			ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
+				 "VIDEO_SLIDES_START");
+		}
+	}
+}
+
+
 static void stream_rtpestab_handler(struct stream *strm, void *arg)
 {
 	struct call *call = arg;
+	char* content= NULL;
 	MAGIC_CHECK(call);
+
+	content = sdp_media_rattr(stream_sdpmedia(strm), "content");
+
+	if(0==str_cmp(content, "slides")){
+		tmr_start(&call->tmr_slides, 1000, check_slides_stream, call);
+		return;
+	}
 
 	ua_event(call->ua, UA_EVENT_CALL_RTPESTAB, call,
 		 "%s", sdp_media_name(stream_sdpmedia(strm)));
@@ -543,8 +620,23 @@ static void stream_rtcp_handler(struct stream *strm,
 		if (call->config_avt.rtp_stats)
 			call_set_xrtpstat(call);
 
-		ua_event(call->ua, UA_EVENT_CALL_RTCP, call,
-			 "%s", sdp_media_name(stream_sdpmedia(strm)));
+		struct sdp_media *m ;
+		struct le *le;
+		int err;
+		char *content = NULL;
+
+		content = sdp_media_rattr(stream_sdpmedia(strm), "content");
+
+		if( str_cmp(sdp_media_name(stream_sdpmedia(strm)),
+					   "video") == 0) {
+			ua_event(call->ua, UA_EVENT_CALL_RTCP, call,
+				 "%s-%s", sdp_media_name(stream_sdpmedia(strm)),
+				 content?content:"unknown");
+		}
+		else{
+			ua_event(call->ua, UA_EVENT_CALL_RTCP, call,
+				 "%s", sdp_media_name(stream_sdpmedia(strm)));
+		}
 		break;
 
 	case RTCP_APP:
@@ -762,6 +854,28 @@ int call_streams_alloc(struct call *call)
 				  video_error_handler, call);
 		if (err)
 			return err;
+
+		if (str_isset(call->cfg->bfcp.proto)) {
+			err = video_alloc(&call->slides, &call->streaml,
+					  &strm_prm,
+					  call->cfg, call->sdp,
+					  acc->mnat, call->mnats,
+					  acc->menc, call->mencs,
+					  "slides",
+					  account_vidcodecl(call->acc),
+					  baresip_vidfiltl(),
+					  !call->got_offer,
+					  video_error_handler, call);
+
+			if (err)
+				return err;
+
+			err = bfcp_alloc(&call->bfcp, call->sdp,
+					 &call->cfg->bfcp, !call->got_offer,
+					 acc->mnat, call->mnats);
+			if (err)
+				return err;
+		}
 	}
 
 	FOREACH_STREAM {
@@ -845,6 +959,7 @@ int call_alloc(struct call **callp, const struct config *cfg, struct list *lst,
 	tmr_init(&call->tmr_inv);
 	tmr_init(&call->tmr_answ);
 	tmr_init(&call->tmr_reinv);
+	tmr_init(&call->tmr_slides);
 
 	call->cfg    = cfg;
 	call->acc    = mem_ref(acc);
@@ -856,6 +971,8 @@ int call_alloc(struct call **callp, const struct config *cfg, struct list *lst,
 	call->estadir = SDP_SENDRECV;
 	call->estvdir = SDP_SENDRECV;
 	call->use_rtp = prm->use_rtp;
+	call->pfu_disabled = false;
+	call->slides_displayed = false;
 	call_decode_sip_autoanswer(call, msg);
 	call_decode_diverter(call, msg);
 
@@ -1266,6 +1383,8 @@ static bool call_need_modify(const struct call *call)
 int call_answer(struct call *call, uint16_t scode, enum vidmode vmode)
 {
 	struct mbuf *desc;
+	char public_address[16] = "";
+	struct sa pub_addr;
 	int err;
 
 	if (!call || !call->sess)
@@ -1285,8 +1404,10 @@ int call_answer(struct call *call, uint16_t scode, enum vidmode vmode)
 		return EAGAIN;
 	}
 
-	if (vmode == VIDMODE_OFF)
+	if (vmode == VIDMODE_OFF){
 		call->video = mem_deref(call->video);
+		call->slides = mem_deref(call->slides);
+	}
 
 	info("call: answering call on line %u from %s with %u\n",
 			call->linenum, call->peer_uri, scode);
@@ -1297,7 +1418,14 @@ int call_answer(struct call *call, uint16_t scode, enum vidmode vmode)
 	ua_event(call->ua, UA_EVENT_CALL_LOCAL_SDP, call,
 		 "%s", !call->got_offer ? "offer" : "answer");
 
-	err = sdp_encode(&desc, call->sdp, !call->got_offer);
+	sa_ntop(sdp_session_laddr(call->sdp), public_address,
+	        sizeof(public_address) );
+
+	conf_get_str(conf_cur(), "public_address", public_address, sizeof(public_address));
+	err = sa_set_str(&pub_addr, public_address, 0);
+
+	sdp_session_set_laddr(call->sdp, &pub_addr);
+	err |= sdp_encode(&desc, call->sdp, !call->got_offer);
 	if (err)
 		return err;
 
@@ -1349,7 +1477,8 @@ bool call_has_video(const struct call *call)
 	if (!call)
 		return false;
 
-	return sdp_media_has_media(stream_sdpmedia(video_strm(call->video)));
+	return sdp_media_has_media(stream_sdpmedia(video_strm(call->video))) ||
+	       sdp_media_has_media(stream_sdpmedia(video_strm(call->slides))) ;
 }
 
 
@@ -1629,6 +1758,9 @@ int call_status(struct re_printf *pf, const struct call *call)
 	if (call->video)
 		err |= video_print(pf, call->video);
 
+	if (call->slides)
+		err |= video_print(pf, call->slides);
+
 	/* remove old junk */
 	err |= re_hprintf(pf, "    ");
 
@@ -1691,6 +1823,49 @@ int call_send_digit(struct call *call, char key)
 	else {
 		err = audio_send_digit(call->audio, key);
 	}
+
+	return err;
+}
+
+
+/**
+ * Send a picture_fast_update request to the peer
+ *
+ * @param call  Call object
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+int call_send_pfu(struct call *call, const char* content, const char* label)
+{
+	char media_strm[128] = "";
+	int err = 0;
+
+	if (!call)
+		return EINVAL;
+
+	if (call->pfu_disabled)
+		return 1;
+
+	if(0==str_cmp(content, "slides")){
+		re_snprintf(media_strm, sizeof(media_strm),
+			    "<media_stream>%s</media_stream>", label);
+	}
+
+	err = send_info(call->sess,
+			"application/media_control+xml",
+			"<?xml version=\"1.0\" encoding=\"utf-8\" ?>"
+			"<media_control><vc_primitive><to_encoder>"
+			"<picture_fast_update>"
+			"%s"
+			"</picture_fast_update>"
+			"</to_encoder></vc_primitive></media_control>",
+			send_pfu_info_handler,
+			call, media_strm);
+	if (err) {
+		warning("call: picture_fast_update request failed (%m)\n", err);
+	}
+
+	call->pfu_disabled = true;
 
 	return err;
 }
@@ -1848,6 +2023,7 @@ static void sipsess_estab_handler(const struct sip_msg *msg, void *arg)
 {
 	struct call *call = arg;
 	uint32_t wait;
+	char * content = NULL;
 	(void)msg;
 
 	MAGIC_CHECK(call);
@@ -1868,7 +2044,9 @@ static void sipsess_estab_handler(const struct sip_msg *msg, void *arg)
 
 		FOREACH_STREAM {
 			struct stream *strm = le->data;
-			stream_enable_rtp_timeout(strm, call->rtp_timeout_ms);
+			content = sdp_media_rattr(stream_sdpmedia(strm), "content");
+			if(0!=str_cmp(content, "slides"))
+				stream_enable_rtp_timeout(strm, call->rtp_timeout_ms);
 		}
 	}
 
@@ -1887,6 +2065,19 @@ static void sipsess_estab_handler(const struct sip_msg *msg, void *arg)
 	call_event_handler(call, CALL_EVENT_ESTABLISHED, "%s", call->peer_uri);
 }
 
+static void call_handle_info_req(struct call *call, const struct sip_msg *req)
+{
+	struct pl body;
+
+	pl_set_mbuf(&body, req->mb);
+
+	/* Poor-mans XML parsing */
+	if (0 == re_regex(body.p, body.l, "picture_fast_update")) {
+		debug("call: receive media control: fast_update=%d\n");
+		video_encode_refresh(call->video);
+	}
+}
+
 
 static void dtmfend_handler(void *arg)
 {
@@ -1897,8 +2088,9 @@ static void dtmfend_handler(void *arg)
 }
 
 
-static void sipsess_send_info_handler(int err, const struct sip_msg *msg,
-				void *arg)
+static void send_dtmf_info_handler(int err,
+				   const struct sip_msg *msg,
+				   void *arg)
 {
 	(void)arg;
 
@@ -1907,6 +2099,25 @@ static void sipsess_send_info_handler(int err, const struct sip_msg *msg,
 	else if (msg && msg->scode != 200)
 		warning("call: sending DTMF INFO failed (scode: %d)",
 				msg->scode);
+}
+
+
+static void send_pfu_info_handler(int err,
+				  const struct sip_msg *msg,
+				  void *arg)
+{
+	struct call *call = arg;
+	struct config *cur_conf;
+
+	if (err)
+		warning("call: sending PICTURE_FAST_UPDATE INFO failed (%m)", err);
+	else if (msg && msg->scode != 200) {
+		warning("call: sending PICTURE_FAST_UPDATE INFO failed (scode: %d)",
+				msg->scode);
+	}
+
+	if (msg->scode == 200 || msg->scode == 408)
+		call->pfu_disabled = false;
 }
 
 
@@ -1947,6 +2158,11 @@ static void sipsess_info_handler(struct sip *sip, const struct sip_msg *msg,
 		}
 	}
 	else if (!mbuf_get_left(msg->mb)) {
+		(void)sip_reply(sip, msg, 200, "OK");
+	}
+	else if (msg_ctype_cmp(&msg->ctyp,
+			       "application", "media_control+xml")) {
+		call_handle_info_req(call, msg);
 		(void)sip_reply(sip, msg, 200, "OK");
 	}
 	else {
@@ -2101,6 +2317,8 @@ static bool have_common_video_codecs(const struct call *call)
 
 	sc = sdp_media_rcodec(stream_sdpmedia(video_strm(call->video)));
 	if (!sc)
+		sc = sdp_media_rcodec(stream_sdpmedia(video_strm(call->slides)));
+	if (!sc)
 		return false;
 
 	vc = sc->data;
@@ -2164,7 +2382,8 @@ int call_accept(struct call *call, struct sipsess_sock *sess_sock,
 		 * See RFC 6157
 		 */
 		if (!valid_addressfamily(call, audio_strm(call->audio)) ||
-		    !valid_addressfamily(call, video_strm(call->video))) {
+		    !valid_addressfamily(call, video_strm(call->video)) ||
+		    !valid_addressfamily(call, video_strm(call->slides))){
 			sip_treply(NULL, uag_sip(), msg, 488,
 				   "Not Acceptable Here");
 
@@ -2440,9 +2659,37 @@ static int send_invite(struct call *call)
 }
 
 
-static int send_dtmf_info(struct call *call, char key)
+static int send_info(struct sipsess *sess,
+		     const char* content_type, const char* content,
+		     sip_resp_h *resph,
+		     void *arg, const char *fmt, ...)
 {
 	struct mbuf *body;
+	va_list ap;
+	body = mbuf_alloc(1024);
+	int err;
+
+	va_start(ap, fmt);
+	(void)	mbuf_printf(body, content, fmt, ap);
+	va_end(ap);
+	mbuf_set_pos(body, 0);
+
+	err = sipsess_info(sess, content_type, body,
+			   resph, arg);
+
+	if (err) {
+		goto out;
+	}
+
+ out:
+	mem_deref(body);
+
+	return err;
+}
+
+
+static int send_dtmf_info(struct call *call, char key)
+{
 	int err;
 
 	if ((key < '0' || key > '9') &&
@@ -2452,20 +2699,14 @@ static int send_dtmf_info(struct call *call, char key)
 	    (key != '#'))
 		return EINVAL;
 
-	body = mbuf_alloc(25);
-	mbuf_printf(body, "Signal=%c\r\nDuration=250\r\n", key);
-	mbuf_set_pos(body, 0);
-
-	err = sipsess_info(call->sess, "application/dtmf-relay", body,
-			   sipsess_send_info_handler, call);
+	err = send_info(call->sess,
+			"application/dtmf-relay",
+			"Signal=%c\r\nDuration=250\r\n",
+			send_dtmf_info_handler,
+			call, &key);
 	if (err) {
 		warning("call: sipsess_info for DTMF failed (%m)\n", err);
-		goto out;
 	}
-
- out:
-	mem_deref(body);
-
 	return err;
 }
 
@@ -2539,7 +2780,7 @@ struct audio *call_audio(const struct call *call)
 
 
 /**
- * Get the video object for the current call
+ * Get the main video object for the current call
  *
  * @param call  Call object
  *
@@ -2548,6 +2789,19 @@ struct audio *call_audio(const struct call *call)
 struct video *call_video(const struct call *call)
 {
 	return call ? call->video : NULL;
+}
+
+
+/**
+ * Get the slides video object for the current call
+ *
+ * @param call  Call object
+ *
+ * @return Video object
+ */
+struct video *call_slides(const struct call *call)
+{
+	return call ? call->slides : NULL;
 }
 
 

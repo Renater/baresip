@@ -239,7 +239,7 @@ static int cand_gather_relayed(struct mnat_media *m, struct comp *comp,
 	err = turnc_alloc(&turnc, stun_conf(icem_stun(m->icem)),
 			  IPPROTO_UDP, comp->sock, layer, &m->sess->srv,
 			  username, password,
-			  60, turnc_handler, comp);
+			  60, NULL, turnc_handler, comp);
 	if (err)
 		return err;
 

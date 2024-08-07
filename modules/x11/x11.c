@@ -45,6 +45,17 @@ struct vidisp_st {
 	Atom XwinDeleted;
 	int button_is_down;
 	Time last_time;
+	char display[64];
+	struct geometry {
+		struct resolution {
+			int w;
+			int h;
+		} res;
+		struct position {
+			int x;
+			int y;
+		} pos;
+	} geom;
 };
 
 
@@ -118,7 +129,8 @@ static int create_window(struct vidisp_st *st, const struct vidsz *sz)
 	XSetWindowAttributes attr;
 #endif
 	st->win = XCreateSimpleWindow(st->disp, DefaultRootWindow(st->disp),
-				      0, 0, sz->w, sz->h, 1, 0, 0);
+				      st->geom.pos.x, st->geom.pos.y,
+				      sz->w, sz->h, 0, 0, 0);
 	if (!st->win) {
 		warning("x11: failed to create X window\n");
 		return ENOMEM;
@@ -272,6 +284,9 @@ static int alloc(struct vidisp_st **stp, const struct vidisp *vd,
 {
 	struct vidisp_st *st;
 	int err = 0;
+	char cfg_content[32] = "x11_";
+	char cfg_geometry[64];
+	struct pl x, y, w, h;
 	(void)vd;
 	(void)prm;
 	(void)dev;
@@ -284,7 +299,31 @@ static int alloc(struct vidisp_st **stp, const struct vidisp *vd,
 
 	st->shm.shmaddr = (char *)-1;
 
-	st->disp = XOpenDisplay(NULL);
+	str_ncpy(st->display, "", str_len(""));
+	st->geom.res.w = st->geom.res.h = 0;
+	st->geom.pos.x = st->geom.pos.y = 0;
+	str_ncpy(cfg_content + str_len(cfg_content),
+		 prm->content, str_len(prm->content)+1);
+	/* Example of expected lines in configuration file:
+	    x11_main	:0,1280x720+0+0
+	    x11_slides	:0,1280x720+1280+0 */
+	err = conf_get_csv(conf_cur(), cfg_content,
+			   st->display, sizeof(st->display),
+			   cfg_geometry, sizeof(cfg_geometry));
+
+	err = err | re_regex(cfg_geometry,
+			     str_len(cfg_geometry),
+			     "[0-9]*x[0-9]*\+[0-9]*\+[0-9]*",
+			     &w, &h, &x, &y );
+	if (!err) {
+		st->geom.res.w = pl_u32(&w);
+		st->geom.res.h = pl_u32(&h);
+		st->geom.pos.x = pl_u32(&x);
+		st->geom.pos.y = pl_u32(&y);
+	}
+	err = 0;
+	st->disp = XOpenDisplay(str_len(st->display)==0?
+				NULL:st->display);
 	if (!st->disp) {
 		warning("x11: could not open X display\n");
 		err = ENODEV;
@@ -307,11 +346,15 @@ static int display(struct vidisp_st *st, const char *title,
 		   const struct vidframe *frame, uint64_t timestamp)
 {
 	struct vidframe frame_rgb;
+	struct vidsz frame_size;
 	int err = 0;
 	(void)timestamp;
 
 	if (!st->disp)
 		return ENODEV;
+
+	frame_size.w = st->geom.res.w?st->geom.res.w:frame->size.w;
+	frame_size.h = st->geom.res.h?st->geom.res.h:frame->size.h;
 
 	/*
 	 * check for window delete - without blocking
@@ -365,29 +408,29 @@ static int display(struct vidisp_st *st, const char *title,
 		}
 	}
 
-	if (!vidsz_cmp(&st->size, &frame->size)) {
+	if (!vidsz_cmp(&st->size, &frame_size)) {
 		char capt[256];
 
 		if (st->size.w && st->size.h) {
 			info("x11: reset: %u x %u  --->  %u x %u\n",
 			     st->size.w, st->size.h,
-			     frame->size.w, frame->size.h);
+			     frame_size.w, frame_size.h);
 		}
 
 		if (st->internal && !st->win)
-			err = create_window(st, &frame->size);
+			err = create_window(st, &frame_size);
 
-		err |= x11_reset(st, &frame->size);
+		err |= x11_reset(st, &frame_size);
 		if (err)
 			return err;
 
 		if (title) {
 			re_snprintf(capt, sizeof(capt), "%s - %u x %u",
-				    title, frame->size.w, frame->size.h);
+				    title, frame_size.w, frame_size.h);
 		}
 		else {
 			re_snprintf(capt, sizeof(capt), "%u x %u",
-				    frame->size.w, frame->size.h);
+				    frame_size.w, frame_size.h);
 		}
 
 		XStoreName(st->disp, st->win, capt);
@@ -395,7 +438,7 @@ static int display(struct vidisp_st *st, const char *title,
 
 	/* Convert from YUV420P to RGB */
 
-	vidframe_init_buf(&frame_rgb, st->pixfmt, &frame->size,
+	vidframe_init_buf(&frame_rgb, st->pixfmt, &frame_size,
 			  (uint8_t *)st->shm.shmaddr);
 
 	vidconv(&frame_rgb, frame, 0);

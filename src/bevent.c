@@ -514,9 +514,12 @@ int event_encode_dict(struct odict *od, struct ua *ua, enum ua_event ev,
 
 		if (0 == str_casecmp(prm, "audio"))
 			strm = audio_strm(call_audio(call));
-		else if (0 == str_casecmp(prm, "video"))
-			strm = video_strm(call_video(call));
-
+		else if (NULL != strcasestr(prm, "video")){
+			if (NULL != strcasestr(prm, "main"))
+				strm = video_strm(call_video(call));
+			if (NULL != strcasestr(prm, "slides"))
+				strm = video_strm(call_slides(call));
+		}
 		err = add_rtcp_stats(od, stream_rtcp_stats(strm));
 		if (err)
 			goto out;
@@ -950,6 +953,7 @@ const char *uag_event_str(enum ua_event ev)
 	case UA_EVENT_CALL_DTMF_END:        return "CALL_DTMF_END";
 	case UA_EVENT_CALL_RTPESTAB:        return "CALL_RTPESTAB";
 	case UA_EVENT_CALL_RTCP:            return "CALL_RTCP";
+	case UA_EVENT_CALL_VIDEO_DISP:      return "VIDEO_DISP";
 	case UA_EVENT_CALL_MENC:            return "CALL_MENC";
 	case UA_EVENT_VU_TX:                return "VU_TX_REPORT";
 	case UA_EVENT_VU_RX:                return "VU_RX_REPORT";

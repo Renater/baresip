@@ -147,6 +147,15 @@ double aurecv_level(const struct audio_recv *ar);
 int aurecv_debug(struct re_printf *pf, const struct audio_recv *ar);
 int aurecv_print_pipeline(struct re_printf *pf, const struct audio_recv *ar);
 
+/*
+ * BFCP
+ */
+
+struct bfcp;
+int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
+	       const struct config_bfcp *bfcp_cfg, bool offerer,
+	       const struct mnat *mnat, struct mnat_sess *mnat_sess);
+int bfcp_start(struct bfcp *bfcp);
 
 /*
  * Call Control
@@ -334,6 +343,8 @@ struct rtp_sock *stream_rtp_sock(const struct stream *strm);
 const struct sa *stream_raddr(const struct stream *strm);
 const char *stream_mid(const struct stream *strm);
 uint8_t stream_generate_extmap_id(struct stream *strm);
+uint64_t stream_rx_ts_last(const struct stream *strm);
+
 
 /* Send */
 void stream_update_encoder(struct stream *s, int pt_enc);

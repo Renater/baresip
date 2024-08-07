@@ -164,6 +164,7 @@ struct video {
 	struct vrx vrx;         /**< Receive/decoder direction            */
 	struct tmr tmr;         /**< Timer for frame-rate estimation      */
 	char *peer;             /**< Peer URI                             */
+	char *content;          /**< Content type                         */
 	bool nack_pli;          /**< Send NACK/PLI to peer                */
 	video_err_h *errh;      /**< Error handler                        */
 	void *arg;              /**< Error handler argument               */
@@ -311,6 +312,7 @@ static void video_destructor(void *arg)
 	tmr_cancel(&v->tmr);
 	mem_deref(v->strm);
 	mem_deref(v->peer);
+	mem_deref(v->content);
 }
 
 
@@ -656,6 +658,12 @@ static void picup_tmr_handler(void *arg)
 
 static void send_fir(struct stream *s, bool pli)
 {
+	struct call *cur_call;
+	struct ua *local_ua ;
+	char *local_uri, *label;
+	char* content= NULL;
+	bool sip_media_control=false;
+	struct config *cur_conf;
 	int err;
 
 	if (pli) {
@@ -664,14 +672,45 @@ static void send_fir(struct stream *s, bool pli)
 		err = stream_ssrc_rx(s, &ssrc);
 		if (!err)
 			err = rtcp_send_pli(stream_rtp_sock(s), ssrc);
+		if (err)
+			warning("video: failed to send PLI %m\n", err);
 	}
-	else
-		err = rtcp_send_fir(stream_rtp_sock(s),
-				    rtp_sess_ssrc(stream_rtp_sock(s)));
+	else{
+		cur_conf = conf_config();
+		if (cur_conf)
+			sip_media_control = cur_conf->sip.media_control;
 
-	if (err) {
-		warning("video: failed to send RTCP %s: %m\n",
-			pli ? "PLI" : "FIR", err);
+		if(sip_media_control) {
+			local_uri = stream_cname(s);
+			if (local_uri)
+				local_ua = uag_find_requri(local_uri);
+
+			if (local_ua)
+				cur_call = ua_call(local_ua);
+
+			if (cur_call){
+				content = sdp_media_rattr(stream_sdpmedia(s),
+							  "content");
+				label = sdp_media_rattr(stream_sdpmedia(s),
+							"label");
+				err = call_send_pfu(cur_call, content,
+						    label);
+			}
+
+			if (err){
+				info("video: failed to send "
+				     "picture_fast_update\n");
+			}
+			else
+				return;
+		}
+		/* Try to send RTCP FIR at last*/
+		err = rtcp_send_fir(
+			stream_rtp_sock(s),
+			rtp_sess_ssrc(stream_rtp_sock(s)));
+		if (err)
+			warning("video: failed to send FIR %m\n",
+				err);
 	}
 }
 
@@ -1088,7 +1127,10 @@ int video_alloc(struct video **vp, struct list *streaml,
 
 	MAGIC_INIT(v);
 
-	v->cfg = cfg->video;
+	if (NULL != strcasestr(content, "slides"))
+		v->cfg = cfg->slides;
+	else
+		v->cfg = cfg->video;
 
 	err  = vtx_alloc(&v->vtx, v);
 	err |= vrx_alloc(&v->vrx, v);
@@ -1133,6 +1175,7 @@ int video_alloc(struct video **vp, struct list *streaml,
 	if (content) {
 		err |= sdp_media_set_lattr(stream_sdpmedia(v->strm), true,
 					   "content", "%s", content);
+		err |= str_dup(&v->content, content);
 	}
 
 	if (err)
@@ -1200,6 +1243,7 @@ static void vidisp_resize_handler(const struct vidsz *sz, void *arg)
 static int set_vidisp(struct vrx *vrx)
 {
 	struct vidisp *vd;
+	char *content;
 	int err;
 
 	vrx->vidisp = mem_deref(vrx->vidisp);
@@ -1212,6 +1256,8 @@ static int set_vidisp(struct vrx *vrx)
 	if (!vd)
 		return ENOENT;
 
+	str_ncpy(&vrx->vidisp_prm.content, vrx->video->content,
+		 sizeof(vrx->video->content));
 	err = vd->alloch(&vrx->vidisp, vd, &vrx->vidisp_prm, vrx->device,
 			 vidisp_resize_handler, vrx);
 	if (err)
@@ -1789,6 +1835,7 @@ int video_debug(struct re_printf *pf, const struct video *v)
 		err |= vrx_print_pipeline(pf, vrx);
 
 	err |= stream_debug(pf, v->strm);
+	print_rtp_stats(v->strm);
 
 	return err;
 }
