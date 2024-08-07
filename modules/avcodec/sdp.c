@@ -47,7 +47,7 @@ int avcodec_h264_fmtp_enc(struct mbuf *mb, const struct sdp_format *fmt,
 
 	conf_get_str(conf_cur(), "avcodec_profile_level_id",
 		     profile_level_id, sizeof(profile_level_id));
-	conf_get_str(conf_cur(), "video_fmtp_append",
+	conf_get_str(conf_cur(), "avcodec_fmtp_append",
 		     append, sizeof(append));
 
 	if (str_isset(profile_level_id)) {

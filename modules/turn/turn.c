@@ -215,7 +215,7 @@ static void turn_handler(int err, uint16_t scode, const char *reason,
 		    err = turnc_alloc(&other->turnc, NULL,
 		          IPPROTO_UDP, other->sock, LAYER,
 		          &m->sess->srv, m->sess->user, m->sess->pass,
-		          TURN_DEFAULT_LIFETIME, &token,
+		          TURN_DEFAULT_LIFETIME,
 		          turn_handler, other);
 		}
 		else
@@ -250,7 +250,7 @@ static void tcp_estab_handler(void *arg)
 	err = turnc_alloc(&comp->turnc, NULL, IPPROTO_TCP, comp->tc, 0,
 			  &m->sess->srv,
 			  m->sess->user, m->sess->pass,
-			  TURN_DEFAULT_LIFETIME, NULL, turn_handler, comp);
+			  TURN_DEFAULT_LIFETIME, turn_handler, comp);
 	if (err) {
 		m->sess->estabh(err, 0, NULL, m->sess->arg);
 	}
@@ -284,7 +284,7 @@ static int media_start(struct mnat_sess *sess, struct mnat_media *m)
 			err |= turnc_alloc(&comp->turnc, NULL,
 					   IPPROTO_UDP, comp->sock, LAYER,
 					   &sess->srv, sess->user, sess->pass,
-					   TURN_DEFAULT_LIFETIME, NULL,
+					   TURN_DEFAULT_LIFETIME,
 					   turn_handler, comp);
 			break;
 

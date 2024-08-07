@@ -318,8 +318,10 @@ static int update_streams(struct call *call)
 	else
 		video_stop(call->video);
 
-	if (stream_is_ready(video_strm(call->slides)))
+	if (stream_is_ready(video_strm(call->slides))){
+		err |= bfcp_start(call->bfcp);
 		err |= video_update(call->slides, call->peer_uri);
+	}
 	else
 		video_stop(call->slides);
 
@@ -856,6 +858,12 @@ int call_streams_alloc(struct call *call)
 			return err;
 
 		if (str_isset(call->cfg->bfcp.proto)) {
+			err = bfcp_alloc(&call->bfcp, call->sdp,
+					 &call->cfg->bfcp, !call->got_offer,
+					 acc->mnat, call->mnats);
+			if (err)
+				return err;
+
 			err = video_alloc(&call->slides, &call->streaml,
 					  &strm_prm,
 					  call->cfg, call->sdp,
@@ -867,12 +875,6 @@ int call_streams_alloc(struct call *call)
 					  !call->got_offer,
 					  video_error_handler, call);
 
-			if (err)
-				return err;
-
-			err = bfcp_alloc(&call->bfcp, call->sdp,
-					 &call->cfg->bfcp, !call->got_offer,
-					 acc->mnat, call->mnats);
 			if (err)
 				return err;
 		}
@@ -2074,7 +2076,7 @@ static void call_handle_info_req(struct call *call, const struct sip_msg *req)
 	/* Poor-mans XML parsing */
 	if (0 == re_regex(body.p, body.l, "picture_fast_update")) {
 		debug("call: receive media control: fast_update=%d\n");
-		video_encode_refresh(call->video);
+		video_req_keyframe(call->video);
 	}
 }
 

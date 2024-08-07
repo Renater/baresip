@@ -329,12 +329,7 @@ int bfcp_start(struct bfcp *bfcp)
 		return 0;
 	}
 
-	floorctrl = sdp_media_rattr(bfcp->sdpm, "floorctrl");
-
-	if (floorctrl )
-		if (str_str(floorctrl, "s")) {
-			bfcp_send_hello(bfcp);
-		}
+	err = bfcp_send_hello(bfcp);
 
 	return err;
 }

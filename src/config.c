@@ -77,6 +77,8 @@ static struct config core_config = {
 		"", "",
 		640, 480,
 		1000000,
+		0,
+		0,
 		30,
 		true,
 		VID_FMT_YUV420P,
@@ -793,7 +795,7 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 rtp_receive_mode_str(cfg->avt.rxmode),
 
 			 cfg->net.ifname,
-			 net_af_str(cfg->net.af)
+			 net_af_str(cfg->net.af),
 
 			 cfg->bfcp.proto,
 			 cfg->bfcp.floorctrl
