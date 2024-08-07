@@ -2074,7 +2074,7 @@ static void call_handle_info_req(struct call *call, const struct sip_msg *req)
 	/* Poor-mans XML parsing */
 	if (0 == re_regex(body.p, body.l, "picture_fast_update")) {
 		debug("call: receive media control: fast_update=%d\n");
-		video_encode_refresh(call->video);
+		video_req_keyframe(call->video);
 	}
 }
 

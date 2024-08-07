@@ -1462,7 +1462,6 @@ const char *video_get_disp_dev(const struct video *v);
 int   video_debug(struct re_printf *pf, const struct video *v);
 struct stream *video_strm(const struct video *v);
 const struct vidcodec *video_codec(const struct video *vid, bool tx);
-void video_encode_refresh(struct video *v);
 void video_sdp_attr_decode(struct video *v);
 void video_req_keyframe(struct video *vid);
 

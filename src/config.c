@@ -793,7 +793,7 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 rtp_receive_mode_str(cfg->avt.rxmode),
 
 			 cfg->net.ifname,
-			 net_af_str(cfg->net.af)
+			 net_af_str(cfg->net.af),
 
 			 cfg->bfcp.proto,
 			 cfg->bfcp.floorctrl

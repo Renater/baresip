@@ -284,9 +284,6 @@ static void stream_close(struct stream *strm, int err)
 	strm->terminated = true;
 	stream_enable(strm, false);
 	strm->errorh = NULL;
-	strm->rx.rtp_estab = false;
-
-	jbuf_flush(strm->rx.jbuf);
 
 	strm->rx = mem_deref(strm->rx);
 	if (errorh)
@@ -1562,12 +1559,7 @@ const struct sa *stream_raddr(const struct stream *strm)
 
 uint64_t stream_rx_ts_last(const struct stream *strm)
 {
-	if (!strm)
-		return 0;
-	if (!strm->rx.ts_last)
-		return 0;
-
-	return strm->rx.ts_last;
+	return rtprecv_ts_last(strm->rx);
 }
 
 
