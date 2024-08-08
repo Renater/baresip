@@ -527,6 +527,7 @@ void rtprecv_set_socket(struct rtp_receiver *rx, struct rtp_sock *rtp);
 void rtprecv_set_ssrc(struct rtp_receiver *rx, uint32_t ssrc);
 uint64_t rtprecv_ts_last(struct rtp_receiver *rx);
 void rtprecv_set_ts_last(struct rtp_receiver *rx, uint64_t ts_last);
+void rtprecv_set_estab(struct rtp_receiver *rx, bool estab);
 void rtprecv_flush(struct rtp_receiver *rx);
 void rtprecv_enable(struct rtp_receiver *rx, bool enable);
 int  rtprecv_get_ssrc(struct rtp_receiver *rx, uint32_t *ssrc);

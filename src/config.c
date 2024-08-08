@@ -77,6 +77,8 @@ static struct config core_config = {
 		"", "",
 		640, 480,
 		1000000,
+		0,
+		0,
 		30,
 		true,
 		VID_FMT_YUV420P,

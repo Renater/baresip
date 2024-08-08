@@ -285,6 +285,9 @@ static void stream_close(struct stream *strm, int err)
 	stream_enable(strm, false);
 	strm->errorh = NULL;
 
+	rtprecv_set_estab(strm->rx, false);
+	rtprecv_flush(strm->rx);
+
 	strm->rx = mem_deref(strm->rx);
 	if (errorh)
 		errorh(strm, err, strm->sess_arg);
