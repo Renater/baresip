@@ -579,14 +579,14 @@ static void check_slides_stream(struct call *call)
 		if (diff_ms > 1000 && call->slides_displayed){
 			video_stop_display(call->slides);
 			call->slides_displayed = false;
-			ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
-				 "VIDEO_SLIDES_STOP");
+			bevent_call_emit(UA_EVENT_CALL_VIDEO_DISP, call,
+					 "VIDEO_SLIDES_STOP");
 			video_start_display(call->slides, call->peer_uri);
 		}
 		if (diff_ms < 1000 && !call->slides_displayed){
 			call->slides_displayed = true;
-			ua_event(call->ua, UA_EVENT_CALL_VIDEO_DISP, NULL,
-				 "VIDEO_SLIDES_START");
+			bevent_call_emit(UA_EVENT_CALL_VIDEO_DISP, call,
+					 "VIDEO_SLIDES_START");
 		}
 	}
 }
@@ -865,7 +865,7 @@ int call_streams_alloc(struct call *call)
 
 			err = video_alloc(&call->slides, &call->streaml,
 					  &strm_prm,
-					  call->cfg, call->sdp,
+					  call->cfg, acc, call->sdp,
 					  acc->mnat, call->mnats,
 					  acc->menc, call->mencs,
 					  "slides",
