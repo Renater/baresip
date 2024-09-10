@@ -151,6 +151,15 @@ double aurecv_level(const struct audio_recv *ar);
 int aurecv_debug(struct re_printf *pf, const struct audio_recv *ar);
 int aurecv_print_pipeline(struct re_printf *pf, const struct audio_recv *ar);
 
+/*
+ * BFCP
+ */
+
+struct bfcp;
+int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
+	       const struct config_bfcp *bfcp_cfg, bool offerer,
+	       const struct mnat *mnat, struct mnat_sess *mnat_sess);
+int bfcp_start(struct bfcp *bfcp);
 
 /*
  * Call Control
@@ -338,6 +347,8 @@ struct rtp_sock *stream_rtp_sock(const struct stream *strm);
 const struct sa *stream_raddr(const struct stream *strm);
 const char *stream_mid(const struct stream *strm);
 uint8_t stream_generate_extmap_id(struct stream *strm);
+uint64_t stream_rx_ts_last(const struct stream *strm);
+
 
 /* Send */
 void stream_update_encoder(struct stream *s, int pt_enc);
@@ -520,6 +531,7 @@ void rtprecv_set_socket(struct rtp_receiver *rx, struct rtp_sock *rtp);
 void rtprecv_set_ssrc(struct rtp_receiver *rx, uint32_t ssrc);
 uint64_t rtprecv_ts_last(struct rtp_receiver *rx);
 void rtprecv_set_ts_last(struct rtp_receiver *rx, uint64_t ts_last);
+void rtprecv_set_estab(struct rtp_receiver *rx, bool estab);
 void rtprecv_flush(struct rtp_receiver *rx);
 void rtprecv_enable(struct rtp_receiver *rx, bool enable);
 int  rtprecv_get_ssrc(struct rtp_receiver *rx, uint32_t *ssrc);

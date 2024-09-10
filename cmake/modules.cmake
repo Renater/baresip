@@ -84,6 +84,7 @@ set(MODULES
   wincons
   winwave
   x11
+  x11grab
 
   CACHE STRING "List of modules like 'turn;pipewire;alsa'"
 )

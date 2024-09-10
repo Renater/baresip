@@ -478,7 +478,7 @@ void rtprecv_handle_rtcp(const struct sa *src, struct rtcp_msg *msg,
 		return;
 	}
 
-	rx->ts_last = tmr_jiffies();
+	//rx->ts_last = tmr_jiffies();
 	mtx_unlock(rx->mtx);
 
 	pass_rtcp_work(rx, msg);
@@ -575,6 +575,16 @@ void rtprecv_set_ts_last(struct rtp_receiver *rx, uint64_t ts_last)
 
 	mtx_lock(rx->mtx);
 	rx->ts_last = ts_last;
+	mtx_unlock(rx->mtx);
+}
+
+void rtprecv_set_estab(struct rtp_receiver *rx, bool estab)
+{
+	if (!rx)
+		return;
+
+	mtx_lock(rx->mtx);
+	rx->rtp_estab = estab;
 	mtx_unlock(rx->mtx);
 }
 

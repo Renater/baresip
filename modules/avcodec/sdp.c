@@ -39,6 +39,7 @@ int avcodec_h264_fmtp_enc(struct mbuf *mb, const struct sdp_format *fmt,
 	uint8_t profile_idc = 0x42; /* baseline profile */
 	uint8_t profile_iop = 0xe0;
 	uint8_t h264_level_idc = 0x1f;
+	char append[64] = "";
 	(void)offer;
 
 	if (!mb || !fmt || !vc)
@@ -46,6 +47,8 @@ int avcodec_h264_fmtp_enc(struct mbuf *mb, const struct sdp_format *fmt,
 
 	conf_get_str(conf_cur(), "avcodec_profile_level_id",
 		     profile_level_id, sizeof(profile_level_id));
+	conf_get_str(conf_cur(), "avcodec_fmtp_append",
+		     append, sizeof(append));
 
 	if (str_isset(profile_level_id)) {
 		struct pl prof;
@@ -67,10 +70,11 @@ int avcodec_h264_fmtp_enc(struct mbuf *mb, const struct sdp_format *fmt,
  out:
 	return mbuf_printf(mb, "a=fmtp:%s"
 			   " %s"
-			   ";profile-level-id=%02x%02x%02x"
+			   ";profile-level-id=%02x%02x%02x%s"
 			   "\r\n",
 			   fmt->id, vc->variant,
-			   profile_idc, profile_iop, h264_level_idc);
+			   profile_idc, profile_iop, h264_level_idc,
+			   append);
 }
 
 

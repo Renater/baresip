@@ -71,7 +71,20 @@ static struct config core_config = {
 		101
 	},
 
-	/** Video */
+	/** Video main */
+	{
+		"", "",
+		"", "",
+		640, 480,
+		1000000,
+		0,
+		0,
+		30,
+		true,
+		VID_FMT_YUV420P,
+	},
+
+	/** Video slides */
 	{
 		"", "",
 		"", "",
@@ -427,6 +440,8 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 
 	if (0 == conf_get(conf, "filter_registrar", &pl))
 		decode_sip_transports(&cfg->sip.reg_filt, &pl);
+	(void)conf_get_bool(conf, "sip_media_control",
+			    &cfg->sip.media_control);
 
 	/* Call */
 	(void)conf_get_u32(conf, "call_local_timeout",
@@ -509,6 +524,28 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 
 	conf_get_vidfmt(conf, "videnc_format", &cfg->video.enc_fmt);
 
+	/* Slides */
+	(void)conf_get_csv(conf, "slides_source",
+			   cfg->slides.src_mod,
+			   sizeof(cfg->slides.src_mod),
+			   cfg->slides.src_dev,
+			   sizeof(cfg->slides.src_dev));
+	(void)conf_get_csv(conf, "slides_display",
+			   cfg->slides.disp_mod,
+			   sizeof(cfg->slides.disp_mod),
+			   cfg->slides.disp_dev,
+			   sizeof(cfg->slides.disp_dev));
+	if (0 == conf_get_vidsz(conf, "slides_size", &size)) {
+		cfg->slides.width  = size.w;
+		cfg->slides.height = size.h;
+	}
+	(void)conf_get_u32(conf, "slides_bitrate", &cfg->slides.bitrate);
+	(void)conf_get_float(conf, "slides_fps", &cfg->slides.fps);
+	(void)conf_get_bool(conf, "slides_fullscreen",
+			    &cfg->slides.fullscreen);
+
+	conf_get_vidfmt(conf, "slidenc_format", &cfg->slides.enc_fmt);
+
 	/* AVT - Audio/Video Transport */
 	if (0 == conf_get_u32(conf, "rtp_tos", &v))
 		cfg->avt.rtp_tos = v;
@@ -575,6 +612,11 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 			warning("unsupported af (%r)\n", &pl);
 		}
 	}
+	/* BFCP */
+	(void)conf_get_str(conf, "bfcp_proto", cfg->bfcp.proto,
+			   sizeof(cfg->bfcp.proto));
+	(void)conf_get_str(conf, "bfcp_floorctrl", cfg->bfcp.floorctrl,
+			   sizeof(cfg->bfcp.floorctrl));
 
 	return err;
 }
@@ -693,6 +735,26 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 		return err;
 
 	err = re_hprintf(pf,
+			 "# Slides\n"
+			 "slides_source\t\t%s,%s\n"
+			 "#slides_source\t\tavformat,rtmp://127.0.0.1/app/foo\n"
+			 "slide_display\t\t%s,%s\n"
+			 "slides_size\t\t\"%ux%u\"\n"
+			 "slides_bitrate\t\t%u\n"
+			 "slides_fps\t\t%.2f\n"
+			 "slides_fullscreen\t%s\n"
+			 "slidenc_format\t\t%s\n"
+			 "\n",
+			 cfg->slides.src_mod, cfg->slides.src_dev,
+			 cfg->slides.disp_mod, cfg->slides.disp_dev,
+			 cfg->slides.width, cfg->slides.height,
+			 cfg->slides.bitrate, cfg->slides.fps,
+			 cfg->slides.fullscreen ? "yes" : "no",
+			 vidfmt_name(cfg->slides.enc_fmt));
+	if (err)
+		return err;
+
+	err = re_hprintf(pf,
 			 "# AVT\n"
 			 "rtp_tos\t\t\t%u\n"
 			 "rtp_video_tos\t\t%u\n"
@@ -712,6 +774,13 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 "net_af\t\t\t%s\n"
 			 "\n",
 
+			 cfg->slides.src_mod, cfg->slides.src_dev,
+			 cfg->slides.disp_mod, cfg->slides.disp_dev,
+			 cfg->slides.width, cfg->slides.height,
+			 cfg->slides.bitrate, cfg->slides.fps,
+			 cfg->slides.fullscreen ? "yes" : "no",
+			 vidfmt_name(cfg->slides.enc_fmt),
+
 			 cfg->avt.rtp_tos,
 			 cfg->avt.rtpv_tos,
 			 range_print, &cfg->avt.rtp_ports,
@@ -726,7 +795,10 @@ int config_print(struct re_printf *pf, const struct config *cfg)
 			 rtp_receive_mode_str(cfg->avt.rxmode),
 
 			 cfg->net.ifname,
-			 net_af_str(cfg->net.af)
+			 net_af_str(cfg->net.af),
+
+			 cfg->bfcp.proto,
+			 cfg->bfcp.floorctrl
 		   );
 
 	return err;
@@ -941,6 +1013,22 @@ static int core_config_template(struct re_printf *pf, const struct config *cfg)
 			  vidfmt_name(cfg->video.enc_fmt));
 
 	err |= re_hprintf(pf,
+			  "\n# Slides\n"
+			  "#slides_source\t\t%s\n"
+			  "#slides_display\t\t%s\n"
+			  "slides_size\t\t%dx%d\n"
+			  "slides_bitrate\t\t%u\n"
+			  "slides_fps\t\t%.2f\n"
+			  "slides_fullscreen\tno\n"
+			  "slides_format\t\t%s\n"
+			  ,
+			  default_video_device(),
+			  default_video_display(),
+			  cfg->slides.width, cfg->slides.height,
+			  cfg->slides.bitrate, cfg->slides.fps,
+			  vidfmt_name(cfg->slides.enc_fmt));
+
+	err |= re_hprintf(pf,
 			  "\n# AVT - Audio/Video Transport\n"
 			  "rtp_tos\t\t\t184\n"
 			  "rtp_video_tos\t\t136\n"
@@ -974,6 +1062,11 @@ static int core_config_template(struct re_printf *pf, const struct config *cfg)
 			  cfg->avt.video.jbuf_del.min,
 			  cfg->avt.video.jbuf_del.max,
 			  default_interface_print, NULL);
+
+	err |= re_hprintf(pf,
+			  "\n# BFCP\n"
+			  "#bfcp_proto\t\tudp\n"
+			  "#bfcp_floorctrl\t\ts-only\n");
 
 	return err;
 }
@@ -1204,6 +1297,7 @@ int config_write_template(const char *file, const struct config *cfg)
 #else
 	(void)re_fprintf(f, "#module\t\t\t" "v4l2" MOD_EXT "\n");
 #endif
+	(void)re_fprintf(f, "#module\t\t\t" "x11grab" MOD_EXT "\n");
 	(void)re_fprintf(f, "#module\t\t\t" "vidbridge" MOD_EXT "\n");
 
 	(void)re_fprintf(f, "\n# Video display modules\n");
@@ -1260,6 +1354,10 @@ int config_write_template(const char *file, const struct config *cfg)
 	(void)re_fprintf(f, "\n#------------------------------------"
 			 "------------------------------------------\n");
 	(void)re_fprintf(f, "# Module parameters\n");
+	(void)re_fprintf(f, "\n");
+
+	(void)re_fprintf(f, "# SRTP parameters\n");
+	(void)re_fprintf(f, "#preferred_crypto_suite\tAES_CM_128_HMAC_SHA1_80\n");
 	(void)re_fprintf(f, "\n");
 
 	(void)re_fprintf(f, "# DTLS SRTP parameters\n");

@@ -229,6 +229,8 @@ void call_set_video_ldir(struct call *call, enum sdp_dir dir);
 int  call_set_video_dir(struct call *call, enum sdp_dir dir);
 int  call_update_media(struct call *call);
 int  call_send_digit(struct call *call, char key);
+int  call_send_pfu(struct call *call, const char* content,
+		   const char* label);
 bool call_has_audio(const struct call *call);
 bool call_has_video(const struct call *call);
 bool call_early_video_available(const struct call *call);
@@ -255,6 +257,7 @@ const char   *call_alerturi(const struct call *call);
 const char   *call_diverteruri(const struct call *call);
 struct audio *call_audio(const struct call *call);
 struct video *call_video(const struct call *call);
+struct video *call_slides(const struct call *call);
 struct list  *call_streaml(const struct call *call);
 struct ua    *call_get_ua(const struct call *call);
 bool          call_is_onhold(const struct call *call);
@@ -365,6 +368,7 @@ struct config_sip {
 	enum tls_resume_mode tls_resume; /** TLS resumption mode    */
 	uint8_t tos;            /**< Type-of-Service for SIP        */
 	uint32_t reg_filt;	/**< Registrar filter transport mask*/
+	bool media_control;     /**< Media Control over SIP         */
 };
 
 /** Call config */
@@ -448,6 +452,11 @@ struct config_net {
 	bool use_getaddrinfo;   /**< Use getaddrinfo for A/AAAA records */
 };
 
+/** BFCP **/
+struct config_bfcp {
+	char proto[16];         /**< BFCP Transport              */
+	char floorctrl[16];     /**< BFCP floor control role     */
+};
 
 /** Core configuration */
 struct config {
@@ -459,9 +468,12 @@ struct config {
 	struct config_audio audio;
 
 	struct config_video video;
+	struct config_video slides;
+
 	struct config_avt avt;
 
 	struct config_net net;
+	struct config_bfcp bfcp;
 };
 
 int config_parse_conf(struct config *cfg, const struct conf *conf);
@@ -861,6 +873,7 @@ enum ua_event {
 	UA_EVENT_CALL_DTMF_END,
 	UA_EVENT_CALL_RTPESTAB,
 	UA_EVENT_CALL_RTCP,
+	UA_EVENT_CALL_VIDEO_DISP,
 	UA_EVENT_CALL_MENC,
 	UA_EVENT_VU_TX,
 	UA_EVENT_VU_RX,
@@ -1147,6 +1160,7 @@ struct vidisp_st;
 /** Video Display parameters */
 struct vidisp_prm {
 	bool fullscreen;  /**< Enable fullscreen display                    */
+	char content[64];
 };
 
 typedef void (vidisp_resize_h)(const struct vidsz *size, void *arg);
@@ -1519,6 +1533,7 @@ const char *stream_peer(const struct stream *strm);
 int  stream_bundle_init(struct stream *strm, bool offerer);
 int  stream_debug(struct re_printf *pf, const struct stream *s);
 void stream_enable_rtp_timeout(struct stream *strm, uint32_t timeout_ms);
+void print_rtp_stats(const struct stream *s);
 
 
 /**

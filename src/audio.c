@@ -1701,6 +1701,7 @@ int audio_debug(struct re_printf *pf, const struct audio *a)
 			  aurecv_print_pipeline, a->aur);
 
 	err |= stream_debug(pf, a->strm);
+	print_rtp_stats(a->strm);
 
 	return err;
 }

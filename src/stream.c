@@ -91,7 +91,7 @@ struct stream {
 };
 
 
-static void print_rtp_stats(const struct stream *s)
+void print_rtp_stats(const struct stream *s)
 {
 	uint32_t tx_n_packets = metric_n_packets(s->tx.metric);
 	uint32_t rx_n_packets = metric_n_packets(rtprecv_metric(s->rx));
@@ -285,6 +285,9 @@ static void stream_close(struct stream *strm, int err)
 	stream_enable(strm, false);
 	strm->errorh = NULL;
 
+	rtprecv_set_estab(strm->rx, false);
+	rtprecv_flush(strm->rx);
+
 	strm->rx = mem_deref(strm->rx);
 	if (errorh)
 		errorh(strm, err, strm->sess_arg);
@@ -311,7 +314,7 @@ static void check_rtp_handler(void *arg)
 	/* We are in sendrecv mode, check when the last RTP packet
 	 * was received.
 	 */
-	if (sdp_media_dir(strm->sdp) == SDP_SENDRECV) {
+	if (sdp_media_dir(strm->sdp) & SDP_RECVONLY) {
 
 		diff_ms = (int)(now - ts_last);
 
@@ -1554,6 +1557,12 @@ const struct sa *stream_raddr(const struct stream *strm)
 		return NULL;
 
 	return &strm->tx.raddr_rtp;
+}
+
+
+uint64_t stream_rx_ts_last(const struct stream *strm)
+{
+	return rtprecv_ts_last(strm->rx);
 }
 
 
