@@ -1273,6 +1273,7 @@ int config_write_template(const char *file, const struct config *cfg)
 	(void)re_fprintf(f, "#module\t\t\t" "aubridge" MOD_EXT "\n");
 	(void)re_fprintf(f, "#module\t\t\t" "aufile" MOD_EXT "\n");
 	(void)re_fprintf(f, "#module\t\t\t" "ausine" MOD_EXT "\n");
+	(void)re_fprintf(f, "#module\t\t\t" "auwebsocket" MOD_EXT "\n");
 
 	(void)re_fprintf(f, "\n# Video codec Modules (in order)\n");
 	(void)re_fprintf(f, "#module\t\t\t" "avcodec" MOD_EXT "\n");

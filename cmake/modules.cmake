@@ -10,6 +10,7 @@ set(MODULES
   aufile
   auresamp
   ausine
+  auwebsocket
   av1
   avcapture
   avcodec
