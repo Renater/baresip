@@ -148,6 +148,16 @@ static int init_decoder(struct viddec_state *st, const char *name)
 		info("avcodec: decode: hardware accel disabled\n");
 	}
 
+	/* Disable error concealment: better to show a clean frozen frame
+	* than corrupted macroblocks when packets are lost.
+	* FF_EC_GUESS_MVS | FF_EC_DEBLOCK is the libavcodec default and
+	* is exactly what produces the horizontal band artifacts. */
+	st->ctx->error_concealment = 0;
+
+	/* Do not output incomplete or normally-hidden frames */
+	st->ctx->flags2  &= ~AV_CODEC_FLAG2_SHOW_ALL;
+
+
 	if (avcodec_open2(st->ctx, st->codec, NULL) < 0)
 		return ENOENT;
 
@@ -444,10 +454,19 @@ int avcodec_decode_h264(struct viddec_state *st, struct vidframe *frame,
 		goto out;
 
  out:
-	mbuf_rewind(st->mb);
-	st->frag = false;
-
-	return err;
+    
+ 	if (err) {
+        /* Flush the avcodec internal state to prevent the decoder
+         * from carrying over corrupt reference frames.
+         */
+        avcodec_flush_buffers(st->ctx);
+        st->got_keyframe = false;
+    }
+	
+    mbuf_rewind(st->mb);
+    
+    st->frag = false;
+    return err;
 }
 
 
