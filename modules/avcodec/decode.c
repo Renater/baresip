@@ -454,19 +454,19 @@ int avcodec_decode_h264(struct viddec_state *st, struct vidframe *frame,
 		goto out;
 
  out:
-    
- 	if (err) {
-        /* Flush the avcodec internal state to prevent the decoder
-         * from carrying over corrupt reference frames.
-         */
+
+	if (err) {
+		/* Flush the avcodec internal state to prevent the decoder
+		 * from carrying over corrupt reference frames.
+		 */
         avcodec_flush_buffers(st->ctx);
         st->got_keyframe = false;
-    }
-	
-    mbuf_rewind(st->mb);
-    
-    st->frag = false;
-    return err;
+	}
+
+	mbuf_rewind(st->mb);
+
+	st->frag = false;
+	return err;
 }
 
 
