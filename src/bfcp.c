@@ -115,7 +115,7 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 	struct bfcp_attr *attr;
 	pf.vph = stdout_handler;
 	pf.arg = NULL;
-	//bfcp_msg_print(&pf, msg);
+	bfcp_msg_print(&pf, msg);
 	struct bfcp_supprim  supprim;
 	struct bfcp_supattr  supattr;
 	enum bfcp_prim  prim[] = { BFCP_FLOOR_REQUEST,
@@ -154,25 +154,58 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 		supprim.primc = sizeof(prim)/sizeof(prim[0]);
 		supattr.attrv = attrib;
 		supattr.attrc = sizeof(attrib)/sizeof(attrib[0]);
+
 		(void)bfcp_reply(bfcp->conn, msg,
-				 BFCP_HELLO_ACK, 2,
-				 BFCP_SUPPORTED_ATTRS, 0, &supattr,
-				 BFCP_SUPPORTED_PRIMS, 0, &supprim);
+				BFCP_HELLO_ACK, 2,
+				BFCP_SUPPORTED_ATTRS, 0, &supattr,
+				BFCP_SUPPORTED_PRIMS, 0, &supprim);
 		break;
 
 	case BFCP_FLOOR_REQUEST:
 		attr = bfcp_msg_attr(msg, BFCP_FLOOR_ID);
-		uint16_t attr_val = attr->v.u16;
-		uint16_t floor_request_id = 1;
-		struct bfcp_reqstatus reqstatus;
-		reqstatus.status = BFCP_GRANTED;
-		reqstatus.qpos = 0;
-		(void)bfcp_reply(bfcp->conn, msg,
-				 BFCP_FLOOR_REQUEST_STATUS, 1,
-				 BFCP_FLOOR_REQ_INFO, 2, &floor_request_id,
-				 BFCP_OVERALL_REQ_STATUS, 1, &floor_request_id,
-				 BFCP_REQUEST_STATUS, 0, &reqstatus,
-				 BFCP_FLOOR_REQ_STATUS, 0, &attr_val);
+
+		if (!attr) {
+			warning("bfcp: FLOOR_REQUEST without FLOOR_ID\n");
+			break;
+		}
+
+		{
+			uint16_t attr_val = attr->v.u16;
+			uint16_t floor_request_id = 1;
+			struct bfcp_reqstatus reqstatus;
+
+			reqstatus.status = BFCP_GRANTED;
+			reqstatus.qpos = 0;
+
+			(void)bfcp_reply(bfcp->conn, msg,
+					BFCP_FLOOR_REQUEST_STATUS, 1,
+					BFCP_FLOOR_REQ_INFO, 2, &floor_request_id,
+					BFCP_OVERALL_REQ_STATUS, 1, &floor_request_id,
+					BFCP_REQUEST_STATUS, 0, &reqstatus,
+					BFCP_FLOOR_REQ_STATUS, 0, &attr_val);
+		}
+		break;
+
+	case BFCP_FLOOR_STATUS:
+
+		info("bfcp: received FloorStatus\n");
+
+		(void)bfcp_reply(bfcp->conn,
+				msg,
+				BFCP_FLOOR_STATUS_ACK,
+				0);
+
+		break;
+
+	case BFCP_FLOOR_REQUEST_STATUS:
+
+		info("bfcp: received FloorRequestStatus\n");
+
+		(void)bfcp_reply(bfcp->conn,
+				msg,
+				BFCP_FLOOR_REQ_STATUS_ACK,
+				0);
+
 		break;
 
 	case BFCP_FLOOR_RELEASE:
@@ -182,7 +215,8 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 		break;
 
 	default:
-		(void)bfcp_ereply(bfcp->conn, msg, BFCP_UNKNOWN_PRIM);
+		info("bfcp: ignoring unsupported primitive '%s'\n",
+		bfcp_prim_name(msg->prim));
 		break;
 	}
 }
