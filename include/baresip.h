@@ -258,6 +258,10 @@ const char   *call_diverteruri(const struct call *call);
 struct audio *call_audio(const struct call *call);
 struct video *call_video(const struct call *call);
 struct video *call_slides(const struct call *call);
+struct ix_cisco;
+struct ix_cisco *call_ix(const struct call *call);
+int ix_cisco_send_message(struct ix_cisco *ix, const char *text,
+			   const char *type);
 struct list  *call_streaml(const struct call *call);
 struct ua    *call_get_ua(const struct call *call);
 bool          call_is_onhold(const struct call *call);
@@ -458,6 +462,11 @@ struct config_bfcp {
 	char floorctrl[16];     /**< BFCP floor control role     */
 };
 
+/** Cisco IX (FarEndMessage) **/
+struct config_ix_cisco {
+	bool enabled;           /**< Activate IX Cisco channel     */
+};
+
 /** Core configuration */
 struct config {
 
@@ -474,6 +483,7 @@ struct config {
 
 	struct config_net net;
 	struct config_bfcp bfcp;
+	struct config_ix_cisco ix_cisco;
 };
 
 int config_parse_conf(struct config *cfg, const struct conf *conf);

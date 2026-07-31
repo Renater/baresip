@@ -618,6 +618,9 @@ int config_parse_conf(struct config *cfg, const struct conf *conf)
 	(void)conf_get_str(conf, "bfcp_floorctrl", cfg->bfcp.floorctrl,
 			   sizeof(cfg->bfcp.floorctrl));
 
+	/* Cisco IX (FarEndMessage) */
+	(void)conf_get_bool(conf, "ix_cisco_enabled", &cfg->ix_cisco.enabled);
+
 	return err;
 }
 
@@ -1066,7 +1069,8 @@ static int core_config_template(struct re_printf *pf, const struct config *cfg)
 	err |= re_hprintf(pf,
 			  "\n# BFCP\n"
 			  "#bfcp_proto\t\tudp\n"
-			  "#bfcp_floorctrl\t\ts-only\n");
+			  "#bfcp_floorctrl\t\ts-only\n"
+			  "#ix_cisco_enabled\tyes\n");
 
 	return err;
 }

@@ -161,6 +161,19 @@ int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	       const struct mnat *mnat, struct mnat_sess *mnat_sess);
 int bfcp_start(struct bfcp *bfcp);
 
+
+/*
+ * Cisco IX (FarEndMessage)
+ */
+
+struct ix_cisco;
+int ix_cisco_alloc(struct ix_cisco **ixp, struct sdp_session *sdp_sess,
+		    bool offerer, const struct mnat *mnat,
+		    struct mnat_sess *mnat_sess);
+int ix_cisco_start(struct ix_cisco *ix);
+int ix_cisco_send_message(struct ix_cisco *ix, const char *text,
+			   const char *type);
+
 /*
  * Call Control
  */

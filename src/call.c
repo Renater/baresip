@@ -39,6 +39,7 @@ struct call {
 	struct video *video;      /**< Video main stream                    */
 	struct video *slides;     /**< Video slides stream                  */
 	struct bfcp *bfcp;        /**< BFCP                                 */
+	struct ix_cisco *ix;      /**< Canal applicatif Cisco IX (FarEndMsg)*/
 	enum call_state state;    /**< Call state                           */
 	int32_t adelay;           /**< Auto answer delay in ms              */
 	char *aluri;              /**< Alert-Info URI                       */
@@ -325,6 +326,9 @@ static int update_streams(struct call *call)
 	else
 		video_stop(call->slides);
 
+	if (call->ix)
+		err |= ix_cisco_start(call->ix);
+
 	return err;
 }
 
@@ -388,6 +392,7 @@ static void call_destructor(void *arg)
 	mem_deref(call->video);
 	mem_deref(call->slides);
 	mem_deref(call->bfcp);
+	mem_deref(call->ix);
 	mem_deref(call->sdp);
 	mem_deref(call->mnats);
 	mem_deref(call->mencs);
@@ -842,6 +847,14 @@ int call_streams_alloc(struct call *call)
 			  audio_error_handler, call);
 	if (err)
 		return err;
+
+	/* Applicatif Cisco IX channel (FarEndMessage) */
+	if (call->cfg->ix_cisco.enabled) {
+		err = ix_cisco_alloc(&call->ix, call->sdp, !call->got_offer,
+				     acc->mnat, call->mnats);
+		if (err)
+			return err;
+	}
 
 	/* Video stream */
 	if (call->use_video) {
@@ -2803,6 +2816,19 @@ struct video *call_video(const struct call *call)
 struct video *call_slides(const struct call *call)
 {
 	return call ? call->slides : NULL;
+}
+
+
+/**
+ * Get the Cisco IX channel object for the current call (FarEndMessage)
+ *
+ * @param call  Call object
+ *
+ * @return ix_cisco object, or NULL if not allocated for this call
+ */
+struct ix_cisco *call_ix(const struct call *call)
+{
+	return call ? call->ix : NULL;
 }
 
 

@@ -159,6 +159,7 @@ set(SRCS
   src/ausrc.c
   src/baresip.c
   src/bfcp.c
+  src/ix_cisco.c
   src/bundle.c
   src/call.c
   src/cmd.c

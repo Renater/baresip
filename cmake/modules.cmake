@@ -38,6 +38,7 @@ set(MODULES
   gzrtp
   httpd
   httpreq
+  ixmsg
   ice
   in_band_dtmf
   jack
