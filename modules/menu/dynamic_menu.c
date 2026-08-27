@@ -317,8 +317,13 @@ static int call_video_debug(struct re_printf *pf, void *arg)
 {
 	const struct cmd_arg *carg = arg;
 	struct ua *ua = carg->data ? carg->data : menu_uacur();
+	struct call *call = ua_call(ua);
+	int err;
 
-	return video_debug(pf, call_video(ua_call(ua)));
+	err = video_debug(pf, call_video(call));
+	err |= video_debug(pf, call_slides(call));
+
+	return err;
 }
 
 

@@ -4,6 +4,7 @@
  * Copyright (C) 2010 Alfred E. Heggestad
  */
 #include <stdlib.h>
+#include <stdio.h>
 #include <re.h>
 #include <baresip.h>
 #include <string.h>
@@ -1379,12 +1380,10 @@ static int cmd_floor_release(struct re_printf *pf, void *arg)
 }
 
 
-static int switch_video_source(struct re_printf *pf, void *arg)
+static int switch_video_source(struct re_printf *pf, void *arg, bool slides)
 {
 	const struct cmd_arg *carg = arg;
 	struct pl pl_driver, pl_device;
-	struct config_video *vidcfg, *slidescfg;
-	struct config *cfg;
 	struct video *v;
 	const struct vidsrc *vs;
 	struct le *le;
@@ -1395,7 +1394,8 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 	if (re_regex(carg->prm, str_len(carg->prm), "[^,]+,[~]*",
 		     &pl_driver, &pl_device)) {
 
-		(void)re_hprintf(pf, "usage: /vidsrc <driver>,<device>\n");
+		(void)re_hprintf(pf, "usage: /%src <driver>,<device>\n",
+				 slides ? "slide" : "vid");
 		return EINVAL;
 	}
 
@@ -1420,16 +1420,8 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 		}
 	}
 
-	(void)re_hprintf(pf, "switch video device: %s,%s\n", driver, device);
-
-	cfg = conf_config();
-	if (!cfg) {
-		(void)re_hprintf(pf, "no config object\n");
-		return EINVAL;
-	}
-
-	vidcfg= &cfg->video;
-	slidescfg = &cfg->slides;
+	(void)re_hprintf(pf, "switch %s video source: %s,%s\n",
+			 slides ? "slides" : "main", driver, device);
 
 	for (leu = list_head(uag_list()); leu; leu = leu->next) {
 		struct ua *ua = leu->data;
@@ -1437,17 +1429,79 @@ static int switch_video_source(struct re_printf *pf, void *arg)
 
 			struct call *call = le->data;
 
-			v = call_video(call);
-			err = video_set_source(v, vidcfg->src_mod,
-					       vidcfg->src_dev);
-			v = call_slides(call);
-			err |= video_set_source(v, slidescfg->src_mod,
-						slidescfg->src_dev);
+			v = slides ? call_slides(call) : call_video(call);
+			err = video_set_source(v, driver, device);
 			if (err) {
 				(void)re_hprintf(pf,
-						 "failed to set video-source"
-						 " (%m)\n", err);
+						 "failed to set %s video-source"
+						 " (%m)\n", slides ? "slides" : "main", err);
 				break;
+			}
+		}
+	}
+
+	return 0;
+}
+
+
+static int cmd_switch_video_source(struct re_printf *pf, void *arg)
+{
+	return switch_video_source(pf, arg, false);
+}
+
+
+static int cmd_switch_slides_source(struct re_printf *pf, void *arg)
+{
+	const struct cmd_arg *carg = arg;
+	struct le *le, *leu;
+	char driver[16], device[128];
+	unsigned width, height, bitrate;
+	double fps;
+	int end;
+	int err = 0;
+
+	if (sscanf(carg->prm, "%15[^,],%127[^,],%ux%u,%lf,%u%n", driver,
+		   device, &width, &height, &fps, &bitrate, &end) != 6 ||
+	    carg->prm[end] != '\0' ||
+	    !width || !height ||
+	    fps <= 0.0 || !bitrate) {
+		(void)re_hprintf(pf,
+				 "usage: /slidesrc <driver>,<device>,"
+				 "<width>x<height>,<fps>,<bitrate>\n");
+		return EINVAL;
+	}
+
+	const struct vidsrc *vs = vidsrc_find(baresip_vidsrcl(), driver);
+	if (!vs) {
+		(void)re_hprintf(pf, "no such video-source: %s\n", driver);
+		return ENOENT;
+	}
+	else if (!list_isempty(&vs->dev_list) &&
+		 !mediadev_find(&vs->dev_list, device)) {
+		(void)re_hprintf(pf, "no such device for %s video-source: %s\n",
+				 driver, device);
+		mediadev_print(pf, &vs->dev_list);
+		return ENOENT;
+	}
+
+	(void)re_hprintf(pf, "switch slides source: %s,%s,%ux%u,%.2f,%u\n",
+			 driver, device, width, height, fps, bitrate);
+
+	for (leu = list_head(uag_list()); leu; leu = leu->next) {
+		struct ua *ua = leu->data;
+
+		for (le = list_tail(ua_calls(ua)); le; le = le->prev) {
+			struct call *call = le->data;
+
+			err = video_set_params(call_slides(call), width, height,
+					       fps, bitrate);
+			if (!err)
+				err = video_set_source(call_slides(call), driver, device);
+			if (err) {
+				(void)re_hprintf(pf,
+						 "failed to set slides source"
+						 " (%m)\n", err);
+				return err;
 			}
 		}
 	}
@@ -1561,7 +1615,9 @@ static const struct cmd cmdv[] = {
 {"uareg",     0,    CMD_PRM, "UA register <regint> [index]", cmd_uareg       },
 {"uaaddheader", 0,  CMD_PRM, "Add custom header to UA",      cmd_addheader   },
 {"uarmheader",  0,  CMD_PRM, "Remove custom header from UA", cmd_rmheader    },
-{"vidsrc",    0,    CMD_PRM, "Switch video source",     switch_video_source  },
+{"vidsrc",    0,    CMD_PRM, "Switch video source",     cmd_switch_video_source},
+{"slidesrc",  0,    CMD_PRM, "Switch slides source and parameters",
+														cmd_switch_slides_source},
 {"floorreq",  0,    CMD_PRM, "Request BFCP slides floor [call-id]",
                                                         cmd_floor_request    },
 {"floorrel",  0,    CMD_PRM, "Release BFCP slides floor [call-id]",

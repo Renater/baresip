@@ -1464,6 +1464,8 @@ void video_stop(struct video *v);
 int   video_set_fullscreen(struct video *v, bool fs);
 void  video_vidsrc_set_device(struct video *v, const char *dev);
 int   video_set_source(struct video *v, const char *name, const char *dev);
+int   video_set_params(struct video *v, unsigned width, unsigned height,
+		       double fps, uint32_t bitrate);
 void  video_set_devicename(struct video *v, const char *src, const char *disp);
 const char *video_get_src_dev(const struct video *v);
 const char *video_get_disp_dev(const struct video *v);

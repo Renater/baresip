@@ -1436,6 +1436,7 @@ int video_start_source(struct video *v)
 			warning("video: could not set source to"
 				" [%u x %u] %m\n",
 				size.w, size.h, err);
+			return err;
 		}
 
 		vtx->vs = vs;
@@ -1844,7 +1845,8 @@ int video_debug(struct re_printf *pf, const struct video *v)
 	vtx = &v->vtx;
 	vrx = &v->vrx;
 
-	err = re_hprintf(pf, "\n--- Video stream ---\n");
+	err = re_hprintf(pf, "\n--- %s video stream ---\n",
+			 v->content ? v->content : "main");
 	err |= re_hprintf(pf, " source started: %s\n",
 		v->vtx.vsrc ? "yes" : "no");
 	err |= re_hprintf(pf, " display started: %s\n",
@@ -1889,8 +1891,8 @@ int video_set_source(struct video *v, const char *name, const char *dev)
 {
 	struct vidsrc *vs = (struct vidsrc *)vidsrc_find(baresip_vidsrcl(),
 							 name);
-	struct vtx *vtx;
-	int err;
+	bool active;
+	int err = 0;
 
 	if (!v)
 		return EINVAL;
@@ -1898,20 +1900,56 @@ int video_set_source(struct video *v, const char *name, const char *dev)
 	if (!vs)
 		return ENOENT;
 
-	vtx = &v->vtx;
+	active = re_atomic_rlx(&v->vtx.run);
+	if (active)
+		video_stop_source(v);
 
-	vtx->vsrc = mem_deref(vtx->vsrc);
+	str_ncpy(v->cfg.src_mod, name, sizeof(v->cfg.src_mod));
+	str_ncpy(v->cfg.src_dev, dev, sizeof(v->cfg.src_dev));
+	str_ncpy(v->vtx.module, name, sizeof(v->vtx.module));
+	str_ncpy(v->vtx.device, dev, sizeof(v->vtx.device));
 
-	err = vs->alloch(&vtx->vsrc, vs, &vtx->vsrc_prm,
-			 &vtx->vsrc_size, NULL, dev,
-			 vidsrc_frame_handler, vidsrc_packet_handler,
-			 vidsrc_error_handler, vtx);
-	if (err)
-		return err;
+	if (active)
+		err = video_start_source(v);
 
-	vtx->vs = vs;
+	return err;
+}
 
-	return 0;
+
+int video_set_params(struct video *v, unsigned width, unsigned height,
+		     double fps, uint32_t bitrate)
+{
+	const struct vidcodec *vc;
+	int pt, err = 0;
+	bool active;
+
+	if (!v || !width || !height || fps <= 0.0 || !bitrate)
+		return EINVAL;
+
+	active = re_atomic_rlx(&v->vtx.run);
+
+	v->cfg.width = width;
+	v->cfg.height = height;
+	v->cfg.fps = fps;
+	v->cfg.bitrate = bitrate;
+
+	/* Recreate both ends so the new capture and encoder parameters apply. */
+	if (active)
+		video_stop_source(v);
+
+	mtx_lock(v->vtx.lock_enc);
+	vc = v->vtx.vc;
+	pt = stream_pt_enc(v->strm);
+	v->vtx.vc = NULL;
+	v->vtx.enc = mem_deref(v->vtx.enc);
+	mtx_unlock(v->vtx.lock_enc);
+
+	if (vc)
+		err = video_encoder_set(v, (struct vidcodec *)vc, pt, NULL);
+	if (!err && active)
+		err = video_start_source(v);
+
+	return err;
 }
 
 
