@@ -156,10 +156,19 @@ int aurecv_print_pipeline(struct re_printf *pf, const struct audio_recv *ar);
  */
 
 struct bfcp;
+
+/** Called when the slides floor is granted (true) or lost (false) */
+typedef void (bfcp_floor_h)(bool granted, void *arg);
+
 int bfcp_alloc(struct bfcp **bfcpp, struct sdp_session *sdp_sess,
 	       const struct config_bfcp *bfcp_cfg, bool offerer,
-	       const struct mnat *mnat, struct mnat_sess *mnat_sess);
+	       const struct mnat *mnat, struct mnat_sess *mnat_sess,
+	       bfcp_floor_h *floorh, void *arg);
 int bfcp_start(struct bfcp *bfcp);
+int bfcp_send_hello(struct bfcp *bfcp);
+int bfcp_floor_request(struct bfcp *bfcp);
+int bfcp_floor_release(struct bfcp *bfcp);
+bool bfcp_floor_granted(const struct bfcp *bfcp);
 
 /*
  * Call Control

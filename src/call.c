@@ -67,6 +67,7 @@ struct call {
 	bool early_confirmed;     /**< Early media confirmed by PRACK       */
 	bool pfu_disabled;        /**< PFU requests disabled                */
 	bool slides_displayed;    /**< True if slides are being displayed   */
+	bool slides_floor;        /**< True if the slides floor is held     */
 	struct mnat_sess *mnats;  /**< Media NAT session                    */
 	bool mnat_wait;           /**< Waiting for MNAT to establish        */
 	struct menc_sess *mencs;  /**< Media encryption session state       */
@@ -817,6 +818,25 @@ static void call_decode_sip_autoanswer(struct call *call,
 }
 
 
+/*
+ * Called by the BFCP layer when the slides floor is granted or lost.
+ * Only the state is tracked here; the media side (which source feeds
+ * the slides stream) is handled separately so that the permanent
+ * keep-alive stream is never interrupted.
+ */
+static void call_bfcp_floor_handler(bool granted, void *arg)
+{
+	struct call *call = arg;
+
+	info("call: slides floor %s\n", granted ? "granted" : "released");
+
+	call->slides_floor = granted;
+
+	module_event("bfcp", granted ? "floor_granted" : "floor_released",
+		     call->ua, call, "%s", call->peer_uri);
+}
+
+
 int call_streams_alloc(struct call *call)
 {
 	struct account *acc = call->acc;
@@ -859,7 +879,8 @@ int call_streams_alloc(struct call *call)
 		if (str_isset(call->cfg->bfcp.proto)) {
 			err = bfcp_alloc(&call->bfcp, call->sdp,
 					 &call->cfg->bfcp, !call->got_offer,
-					 acc->mnat, call->mnats);
+					 acc->mnat, call->mnats,
+					 call_bfcp_floor_handler, call);
 			if (err)
 				return err;
 
@@ -974,6 +995,7 @@ int call_alloc(struct call **callp, const struct config *cfg, struct list *lst,
 	call->use_rtp = prm->use_rtp;
 	call->pfu_disabled = false;
 	call->slides_displayed = false;
+	call->slides_floor = false;
 	call_decode_sip_autoanswer(call, msg);
 	call_decode_diverter(call, msg);
 
@@ -1836,6 +1858,59 @@ int call_send_digit(struct call *call, char key)
  *
  * @return 0 if success, otherwise errorcode
  */
+/**
+ * Request the slides floor (BFCP FloorRequest) for the given call.
+ * The result is reported asynchronously through the module event
+ * "bfcp" / "floor_granted" or "floor_released".
+ *
+ * @param call  Call object
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+int call_bfcp_floor_request(struct call *call)
+{
+	if (!call)
+		return EINVAL;
+
+	if (!call->bfcp)
+		return ENOSYS;
+
+	return bfcp_floor_request(call->bfcp);
+}
+
+
+/**
+ * Release the slides floor (BFCP FloorRelease) for the given call
+ *
+ * @param call  Call object
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+int call_bfcp_floor_release(struct call *call)
+{
+	if (!call)
+		return EINVAL;
+
+	if (!call->bfcp)
+		return ENOSYS;
+
+	return bfcp_floor_release(call->bfcp);
+}
+
+
+/**
+ * Check if the slides floor is currently held for the given call
+ *
+ * @param call  Call object
+ *
+ * @return true if the floor is granted, otherwise false
+ */
+bool call_slides_floor(const struct call *call)
+{
+	return call && call->slides_floor;
+}
+
+
 int call_send_pfu(struct call *call, const char* content, const char* label)
 {
 	char media_strm[128] = "";

@@ -231,6 +231,9 @@ int  call_update_media(struct call *call);
 int  call_send_digit(struct call *call, char key);
 int  call_send_pfu(struct call *call, const char* content,
 		   const char* label);
+int  call_bfcp_floor_request(struct call *call);
+int  call_bfcp_floor_release(struct call *call);
+bool call_slides_floor(const struct call *call);
 bool call_has_audio(const struct call *call);
 bool call_has_video(const struct call *call);
 bool call_early_video_available(const struct call *call);

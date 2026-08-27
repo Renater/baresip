@@ -1327,6 +1327,58 @@ static int cmd_rmheader(struct re_printf *pf, void *arg)
 }
 
 
+/**
+ * Request or release the BFCP slides floor on a call
+ *
+ * @param pf   Print handler
+ * @param arg  Command arguments (carg)
+ *             carg->data is an optional pointer to a User-Agent
+ *             carg->prm is an optional call-id string
+ *
+ * @return 0 if success, otherwise errorcode
+ */
+static int floor_command(struct re_printf *pf, void *arg, bool request)
+{
+	const struct cmd_arg *carg = arg;
+	struct ua *ua = carg->data ? carg->data : menu_uacur();
+	struct call *call = ua_call(ua);
+	int err;
+
+	if (str_isset(carg->prm)) {
+		call = uag_call_find(carg->prm);
+		if (!call) {
+			re_hprintf(pf, "call %s not found\n", carg->prm);
+			return EINVAL;
+		}
+	}
+
+	if (!call) {
+		re_hprintf(pf, "no active call\n");
+		return EINVAL;
+	}
+
+	err = request ? call_bfcp_floor_request(call)
+		      : call_bfcp_floor_release(call);
+	if (err)
+		re_hprintf(pf, "could not %s slides floor (%m)\n",
+			   request ? "request" : "release", err);
+
+	return err;
+}
+
+
+static int cmd_floor_request(struct re_printf *pf, void *arg)
+{
+	return floor_command(pf, arg, true);
+}
+
+
+static int cmd_floor_release(struct re_printf *pf, void *arg)
+{
+	return floor_command(pf, arg, false);
+}
+
+
 static int switch_video_source(struct re_printf *pf, void *arg)
 {
 	const struct cmd_arg *carg = arg;
@@ -1510,6 +1562,10 @@ static const struct cmd cmdv[] = {
 {"uaaddheader", 0,  CMD_PRM, "Add custom header to UA",      cmd_addheader   },
 {"uarmheader",  0,  CMD_PRM, "Remove custom header from UA", cmd_rmheader    },
 {"vidsrc",    0,    CMD_PRM, "Switch video source",     switch_video_source  },
+{"floorreq",  0,    CMD_PRM, "Request BFCP slides floor [call-id]",
+                                                        cmd_floor_request    },
+{"floorrel",  0,    CMD_PRM, "Release BFCP slides floor [call-id]",
+                                                        cmd_floor_release    },
 {NULL,        KEYCODE_ESC,0, "Hangup call",             cmd_hangup           },
 
 #ifdef USE_TLS
