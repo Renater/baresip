@@ -1133,7 +1133,7 @@ int video_alloc(struct video **vp, struct list *streaml,
 
 	MAGIC_INIT(v);
 
-	if (NULL != strcasestr(content, "slides"))
+	if (content && NULL != strcasestr(content, "slides"))
 		v->cfg = cfg->slides;
 	else
 		v->cfg = cfg->video;
