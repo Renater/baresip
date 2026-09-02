@@ -81,6 +81,7 @@ set(MODULES
   vumeter
   webrtc_aec
   webrtc_aecm
+  webrtcsig
   wincons
   winwave
   x11
