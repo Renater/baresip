@@ -441,6 +441,7 @@ int event_encode_dict(struct odict *od, struct ua *ua, enum ua_event ev,
 		const char *dir;
 		const char *call_identifier;
 		const char *peerdisplayname;
+		const char *peeruseragent;
 		enum sdp_dir ardir;
 		enum sdp_dir vrdir;
 		enum sdp_dir aldir;
@@ -457,6 +458,11 @@ int event_encode_dict(struct odict *od, struct ua *ua, enum ua_event ev,
 		if (peerdisplayname){
 				err |= odict_entry_add(od, "peerdisplayname",
 						ODICT_STRING, peerdisplayname);
+		}
+		peeruseragent = call_peeruseragent(call);
+		if (peeruseragent) {
+				err |= odict_entry_add(od, "peeruseragent",
+						ODICT_STRING, peeruseragent);
 		}
 		call_identifier = call_id(call);
 		if (call_identifier) {

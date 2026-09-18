@@ -46,6 +46,7 @@ struct call {
 	char *local_name;         /**< Local display name                   */
 	char *peer_uri;           /**< Peer SIP Address                     */
 	char *peer_name;          /**< Peer display name                    */
+	char *peer_useragent;     /**< Peer User-Agent header               */
 	struct sa msg_src;        /**< Peer message source address          */
 	char *diverter_uri;       /**< Diverter SIP Address                 */
 	char *id;                 /**< Cached session call-id               */
@@ -382,6 +383,7 @@ static void call_destructor(void *arg)
 	mem_deref(call->local_name);
 	mem_deref(call->peer_uri);
 	mem_deref(call->peer_name);
+	mem_deref(call->peer_useragent);
 	mem_deref(call->replaces);
 	mem_deref(call->aluri);
 	mem_deref(call->diverter_uri);
@@ -1672,6 +1674,19 @@ const char *call_peername(const struct call *call)
 
 
 /**
+ * Get the User-Agent the peer announced, or NULL when it announced none
+ *
+ * @param call  Call object
+ *
+ * @return Peer User-Agent
+ */
+const char *call_peeruseragent(const struct call *call)
+{
+	return call ? call->peer_useragent : NULL;
+}
+
+
+/**
  * Get the diverter URI of the call
  *
  * @param call  Call object
@@ -2436,6 +2451,15 @@ int call_accept(struct call *call, struct sipsess_sock *sess_sock,
 	call->outgoing = false;
 	if (pl_isset(&msg->from.dname)) {
 		err = pl_strdup(&call->peer_name, &msg->from.dname);
+		if (err)
+			return err;
+	}
+
+	/* What placed the call: make, firmware and model on most endpoints.
+	   Optional per RFC 3261, so its absence is not an error. */
+	hdr = sip_msg_hdr(msg, SIP_HDR_USER_AGENT);
+	if (hdr && pl_isset(&hdr->val)) {
+		err = pl_strdup(&call->peer_useragent, &hdr->val);
 		if (err)
 			return err;
 	}
