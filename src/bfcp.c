@@ -26,6 +26,12 @@ enum floor_state {
 };
 
 
+enum {
+	CISCO_FLOOR_REQ_STATUS_ACK = 91,
+	CISCO_FLOOR_STATUS_ACK = 93,
+};
+
+
 struct bfcp {
 	struct bfcp_conn *conn;
 	struct sdp_media *sdpm;
@@ -512,6 +518,8 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 
 		(void)bfcp_reply(bfcp->conn,
 				msg,
+				msg->ver == BFCP_VER1 ?
+				(enum bfcp_prim)CISCO_FLOOR_STATUS_ACK :
 				BFCP_FLOOR_STATUS_ACK,
 				0);
 
@@ -524,6 +532,8 @@ static void bfcp_msg_handler(const struct bfcp_msg *msg, void *arg)
 
 		(void)bfcp_reply(bfcp->conn,
 				msg,
+				msg->ver == BFCP_VER1 ?
+				(enum bfcp_prim)CISCO_FLOOR_REQ_STATUS_ACK :
 				BFCP_FLOOR_REQ_STATUS_ACK,
 				0);
 
